@@ -1,0 +1,70 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "./ui";
+
+type NavItem = { href: string; label: string; soon?: boolean };
+
+const sections: { title: string; items: NavItem[] }[] = [
+  { title: "Overview", items: [{ href: "/", label: "Dashboard" }] },
+  {
+    title: "Organization",
+    items: [
+      { href: "/squads", label: "Squads" },
+      { href: "/lobs", label: "Lines of Business" },
+      { href: "/members", label: "Members" },
+    ],
+  },
+  {
+    title: "Delivery",
+    items: [
+      { href: "#", label: "Backlog", soon: true },
+      { href: "#", label: "Sprints", soon: true },
+      { href: "#", label: "Releases", soon: true },
+      { href: "#", label: "Timeline", soon: true },
+      { href: "#", label: "Daily Standup", soon: true },
+      { href: "#", label: "Reports", soon: true },
+    ],
+  },
+  { title: "System", items: [{ href: "/settings", label: "Settings" }] },
+];
+
+export function Nav() {
+  const pathname = usePathname();
+  return (
+    <nav className="space-y-5">
+      {sections.map((section) => (
+        <div key={section.title}>
+          <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{section.title}</div>
+          <ul className="space-y-0.5">
+            {section.items.map((item) => {
+              if (item.soon) {
+                return (
+                  <li key={item.label} className="flex items-center justify-between rounded-md px-3 py-1.5 text-sm text-slate-400">
+                    {item.label}
+                    <span className="text-[10px] uppercase">soon</span>
+                  </li>
+                );
+              }
+              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <li key={item.label}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "block rounded-md px-3 py-1.5 text-sm",
+                      active ? "bg-indigo-50 font-medium text-indigo-700" : "text-slate-700 hover:bg-slate-100",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}

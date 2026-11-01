@@ -1,0 +1,92 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// System-wide settings. Always exactly one row with id = 1.
+model Setting {
+  id                      Int      @id @default(1)
+  /// Working weekdays: 0 = Sunday ... 6 = Saturday
+  workingDays             Int[]    @default([1, 2, 3, 4, 5])
+  defaultDailyHours       Float    @default(8)
+  defaultSprintLengthDays Int      @default(14)
+  updatedAt               DateTime @updatedAt
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @db.Date
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Squad {
+  id               String            @id @default(cuid())
+  name             String            @unique
+  description      String            @default("")
+  /// Overrides the system default sprint length (days) for this squad's LOBs
+  sprintLengthDays Int?
+  lobs             LineOfBusiness[]
+  memberships      SquadMembership[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+/// A Line of Business (LOB) is the "project". Owned by exactly one squad.
+model LineOfBusiness {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  description      String   @default("")
+  squadId          String
+  squad            Squad    @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  /// Overrides the squad / system sprint length (days)
+  sprintLengthDays Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([squadId])
+}
+
+/// Squad member. A name only - members do not log in.
+model Member {
+  id          String            @id @default(cuid())
+  name        String
+  role        String            @default("")
+  active      Boolean           @default(true)
+  memberships SquadMembership[]
+  leaves      Leave[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+/// Hours per week a member gives to a squad.
+model SquadMembership {
+  id          String @id @default(cuid())
+  memberId    String
+  squadId     String
+  weeklyHours Float
+  member      Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  squad       Squad  @relation(fields: [squadId], references: [id], onDelete: Restrict)
+
+  @@unique([memberId, squadId])
+  @@index([squadId])
+}
+
+/// Full days off, start and end inclusive.
+model Leave {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
+}
