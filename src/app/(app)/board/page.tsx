@@ -159,6 +159,11 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
         actions={<div className="flex items-center gap-2"><SprintStateBadge state={sprint.state} />{sprint.state !== "PLANNED" && <HealthBadge health={sum.health} />}<Link href={`/sprints/${sprint.id}`} className="text-sm text-orange-700 hover:underline">Open sprint</Link></div>}
       />
       {header}
+      {sprint.state === "PAUSED" && (
+        <p role="status" className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This sprint is paused{sprint.pauses.find((p) => !p.resumedOn)?.reason ? `: ${sprint.pauses.find((p) => !p.resumedOn)!.reason}` : ""}. You can still move cards, but its tasks are not scheduled until it resumes.
+        </p>
+      )}
 
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">

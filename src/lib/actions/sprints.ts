@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { parseDate } from "@/lib/dates";
+import { addDays, parseDate, toISODate, todayUTC } from "@/lib/dates";
+import { addWorkingDays, workingDaysBetween } from "@/lib/capacity";
+import { getWorkCalendar } from "@/lib/settings";
 import { loadAnalytics } from "@/lib/analytics";
 import { moveItemToSprint, UserError } from "@/lib/sprint-ops";
 import { type ActionState, isoDate, optionalText, toActionError } from "@/lib/action-state";
@@ -60,11 +62,13 @@ export async function updateSprint(_prev: ActionState, formData: FormData): Prom
     const data = sprintSchema.parse(Object.fromEntries(formData.entries()));
     const sprint = await db.sprint.findUnique({ where: { id } });
     if (!sprint) return { error: "This sprint no longer exists." };
-    if (sprint.state === "CLOSED") return { error: "A closed sprint cannot be edited." };
     await checkRelease(sprint.lobId, data.releaseId);
+    // A closed sprint keeps its dates (its results were saved), but its name, goal and release can still be corrected.
+    const closed = sprint.state === "CLOSED";
+    const nameGoalRelease = { name: data.name, goal: data.goal, releaseId: data.releaseId };
     await db.sprint.update({
       where: { id },
-      data: { name: data.name, goal: data.goal, startDate: parseDate(data.startDate), endDate: parseDate(data.endDate), releaseId: data.releaseId },
+      data: closed ? nameGoalRelease : { ...nameGoalRelease, startDate: parseDate(data.startDate), endDate: parseDate(data.endDate) },
     });
   } catch (err) {
     return fail(err);
@@ -103,7 +107,7 @@ export async function closeSprint(_prev: ActionState, formData: FormData): Promi
     const carryTo = optionalId.parse(formData.get("carryTo"));
     const sprint = await db.sprint.findUnique({ where: { id } });
     if (!sprint) return { error: "This sprint no longer exists." };
-    if (sprint.state !== "ACTIVE") return { error: "Only an active sprint can be closed." };
+    if (sprint.state !== "ACTIVE" && sprint.state !== "PAUSED") return { error: "Only an active or paused sprint can be closed." };
     if (carryTo) {
       const target = await db.sprint.findUnique({ where: { id: carryTo } });
       if (!target || target.lobId !== sprint.lobId || target.state === "CLOSED" || target.id === id) {
@@ -123,6 +127,8 @@ export async function closeSprint(_prev: ActionState, formData: FormData): Promi
         where: { sprintId: id, workItemId: { in: carried.map((i) => i.id) } },
         data: { carriedOver: true },
       });
+      // A sprint closed while paused ends its pause today.
+      await tx.sprintPause.updateMany({ where: { sprintId: id, resumedOn: null }, data: { resumedOn: todayUTC() } });
       await tx.sprint.update({ where: { id }, data: { state: "CLOSED", closedAt: new Date(), result } });
       for (const item of carried) await moveItemToSprint(tx, item.id, carryTo);
     });
@@ -285,6 +291,66 @@ export async function quickEstimate(taskId: string, hours: number | null): Promi
       db.workItem.update({ where: { id: taskId }, data: { estimateHours: h } }),
       db.workItemHistory.create({ data: { workItemId: taskId, field: "estimate", oldValue: task.estimateHours == null ? null : String(task.estimateHours), newValue: h == null ? null : String(h) } }),
     ]);
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+const pauseSchema = z.object({
+  id: z.string().min(1),
+  date: isoDate,
+  reason: z.string().trim().max(500, "The reason is too long").default(""),
+});
+
+/** Put an active sprint on hold from a date (today or earlier). Its tasks are not scheduled and it takes no share of anyone's hours until it resumes. */
+export async function pauseSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const d = pauseSchema.parse({ id: formData.get("id"), date: formData.get("date"), reason: formData.get("reason") ?? "" });
+    await db.$transaction(async (tx) => {
+      const sprint = await tx.sprint.findUnique({ where: { id: d.id }, include: { pauses: { orderBy: { startDate: "desc" }, take: 1 } } });
+      if (!sprint) throw new UserError("This sprint no longer exists.");
+      if (sprint.state !== "ACTIVE") throw new UserError(sprint.state === "PAUSED" ? "This sprint is already paused." : "Only an active sprint can be paused.");
+      const from = parseDate(d.date);
+      if (from.getTime() > todayUTC().getTime()) throw new UserError("A sprint can be paused from today or an earlier day, not a future day.");
+      if (from.getTime() < sprint.startDate.getTime()) throw new UserError(`The pause cannot start before the sprint starts (${toISODate(sprint.startDate)}).`);
+      const last = sprint.pauses[0];
+      if (last?.resumedOn && from.getTime() < last.resumedOn.getTime()) throw new UserError(`The sprint was paused until ${toISODate(last.resumedOn)}. Choose a later day.`);
+      await tx.sprintPause.create({ data: { sprintId: sprint.id, startDate: from, reason: d.reason } });
+      await tx.sprint.update({ where: { id: sprint.id }, data: { state: "PAUSED" } });
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Resume a paused sprint. With "extend" the end date moves out by the working days it was paused, so the team keeps its full time. */
+export async function resumeSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const d = pauseSchema.omit({ reason: true }).parse({ id: formData.get("id"), date: formData.get("date") });
+    const extend = formData.get("extend") === "on";
+    const cal = await getWorkCalendar();
+    await db.$transaction(async (tx) => {
+      const sprint = await tx.sprint.findUnique({ where: { id: d.id }, include: { pauses: { where: { resumedOn: null }, take: 1 } } });
+      if (!sprint) throw new UserError("This sprint no longer exists.");
+      const pause = sprint.pauses[0];
+      if (sprint.state !== "PAUSED" || !pause) throw new UserError("This sprint is not paused.");
+      const on = parseDate(d.date);
+      if (on.getTime() < pause.startDate.getTime()) throw new UserError(`The sprint was paused from ${toISODate(pause.startDate)}. Choose that day or a later one.`);
+      if (on.getTime() > todayUTC().getTime()) throw new UserError("A sprint can be resumed from today or an earlier day, not a future day.");
+      const pausedWorkingDays = on.getTime() > pause.startDate.getTime() ? workingDaysBetween(pause.startDate, addDays(on, -1), cal) : 0;
+      const extendBy = extend ? pausedWorkingDays : 0;
+      await tx.sprintPause.update({ where: { id: pause.id }, data: { resumedOn: on, extendedByDays: extendBy } });
+      await tx.sprint.update({
+        where: { id: sprint.id },
+        data: { state: "ACTIVE", ...(extendBy > 0 ? { endDate: addWorkingDays(sprint.endDate, extendBy, cal) } : {}) },
+      });
+    });
   } catch (err) {
     return fail(err);
   }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { loadAnalytics, type TaskView } from "@/lib/analytics";
 import { filterTimeline } from "@/lib/timeline-filter";
+import { TimelineTabs } from "@/components/timeline-tabs";
 import { addDays, eachDay, formatDate, startOfWeek, toISODate, WEEKDAYS_SHORT } from "@/lib/dates";
 import { applyCls, dateParam, selectCls, toQuery } from "@/lib/filters";
 import { isWorkingDay } from "@/lib/capacity";
@@ -13,6 +14,7 @@ import { Badge, Card, Empty, PageHeader, Table, Td, Th, cn } from "@/components/
 type Q = { squad?: string; lob?: string; member?: string; sprint?: string; release?: string; from?: string; to?: string; zoom?: string; only?: string };
 
 function status(t: TaskView) {
+  if (t.sprintPaused) return <Badge tone="amber">Sprint paused</Badge>;
   if (t.issue === "unassigned") return <Badge tone="amber">Unassigned</Badge>;
   if (t.issue === "no-estimate") return <Badge tone="amber">Needs estimate</Badge>;
   if (t.issue === "no-availability") return <Badge tone="red">No availability</Badge>;
@@ -81,6 +83,7 @@ export default async function TimelinePage({ searchParams }: PageProps<"/timelin
         actions={<a href={`/api/export/timeline${exportQuery}`} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Export Excel</a>}
       />
 
+      <TimelineTabs current="hours" filters={{ squad: f.squad, lob: f.lob, member: f.member, sprint: f.sprint, release: f.release }} />
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-2">
           <select name="squad" defaultValue={f.squad ?? ""} className={selectCls} aria-label="Squad">

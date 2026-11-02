@@ -190,6 +190,8 @@ model WorkItemHistory {
 enum SprintState {
   PLANNED
   ACTIVE
+  /// Work is on hold (for example the team was pulled onto something else). Tasks are not scheduled until it resumes.
+  PAUSED
   CLOSED
 }
 
@@ -213,6 +215,7 @@ model Sprint {
   commitments SprintCommitment[]
   shares      SprintMemberShare[]
   plans       SprintMemberPlan[]
+  pauses      SprintPause[]
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
@@ -338,4 +341,20 @@ model SprintMemberPlan {
 
   @@unique([sprintId, memberId])
   @@index([memberId])
+}
+
+/// One period in which a sprint was on hold. The sprint is paused from `startDate` up to the day before `resumedOn`.
+model SprintPause {
+  id             String    @id @default(cuid())
+  sprintId       String
+  sprint         Sprint    @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  startDate      DateTime  @db.Date
+  /// First day the team works on the sprint again; empty while the sprint is still paused
+  resumedOn      DateTime? @db.Date
+  reason         String    @default("")
+  /// Working days the end date was moved by when the sprint resumed (0 if it was not extended)
+  extendedByDays Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  @@index([sprintId, startDate])
 }
