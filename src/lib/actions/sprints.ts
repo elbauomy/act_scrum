@@ -1,0 +1,293 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { parseDate } from "@/lib/dates";
+import { loadAnalytics } from "@/lib/analytics";
+import { moveItemToSprint, UserError } from "@/lib/sprint-ops";
+import { type ActionState, isoDate, optionalText, toActionError } from "@/lib/action-state";
+
+function fail(err: unknown): ActionState {
+  if (err instanceof UserError) return { error: err.message };
+  return toActionError(err);
+}
+const refresh = () => revalidatePath("/", "layout");
+
+const optionalId = z.preprocess((v) => (v === "" || v == null ? null : String(v)), z.string().nullable());
+
+const sprintSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(100, "Name is too long"),
+    goal: optionalText,
+    startDate: isoDate,
+    endDate: isoDate,
+    releaseId: optionalId,
+  })
+  .refine((v) => v.startDate <= v.endDate, { message: "The end date must be on or after the start date" });
+
+async function checkRelease(lobId: string, releaseId: string | null) {
+  if (!releaseId) return;
+  const r = await db.release.findUnique({ where: { id: releaseId }, select: { lobId: true } });
+  if (!r) throw new UserError("The chosen release no longer exists.");
+  if (r.lobId !== lobId) throw new UserError("A sprint can only join a release of its own line of business.");
+}
+
+export async function createSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  let id = "";
+  try {
+    const lobId = z.string().min(1, "Please choose a line of business").parse(formData.get("lobId"));
+    const data = sprintSchema.parse(Object.fromEntries(formData.entries()));
+    await checkRelease(lobId, data.releaseId);
+    const sprint = await db.sprint.create({
+      data: { lobId, name: data.name, goal: data.goal, startDate: parseDate(data.startDate), endDate: parseDate(data.endDate), releaseId: data.releaseId },
+    });
+    id = sprint.id;
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  redirect(`/sprints/${id}`);
+}
+
+export async function updateSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const id = String(formData.get("id"));
+    const data = sprintSchema.parse(Object.fromEntries(formData.entries()));
+    const sprint = await db.sprint.findUnique({ where: { id } });
+    if (!sprint) return { error: "This sprint no longer exists." };
+    if (sprint.state === "CLOSED") return { error: "A closed sprint cannot be edited." };
+    await checkRelease(sprint.lobId, data.releaseId);
+    await db.sprint.update({
+      where: { id },
+      data: { name: data.name, goal: data.goal, startDate: parseDate(data.startDate), endDate: parseDate(data.endDate), releaseId: data.releaseId },
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function startSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const id = String(formData.get("id"));
+    await db.$transaction(async (tx) => {
+      const sprint = await tx.sprint.findUnique({ where: { id }, include: { items: true } });
+      if (!sprint) throw new UserError("This sprint no longer exists.");
+      if (sprint.state !== "PLANNED") throw new UserError("Only a planned sprint can be started.");
+      const planned = sprint.items.filter((i) => i.type !== "TASK");
+      if (planned.length === 0) throw new UserError("Add at least one user story or bug before starting the sprint.");
+      // Commitment snapshot: tasks keep their hours, stories and bugs are recorded for the carry-over count.
+      await tx.sprintCommitment.createMany({
+        data: sprint.items.map((i) => ({ sprintId: id, workItemId: i.id, hours: i.type === "TASK" ? i.estimateHours ?? 0 : 0 })),
+      });
+      await tx.sprint.update({ where: { id }, data: { state: "ACTIVE", startedAt: new Date() } });
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function closeSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const id = String(formData.get("id"));
+    const carryTo = optionalId.parse(formData.get("carryTo"));
+    const sprint = await db.sprint.findUnique({ where: { id } });
+    if (!sprint) return { error: "This sprint no longer exists." };
+    if (sprint.state !== "ACTIVE") return { error: "Only an active sprint can be closed." };
+    if (carryTo) {
+      const target = await db.sprint.findUnique({ where: { id: carryTo } });
+      if (!target || target.lobId !== sprint.lobId || target.state === "CLOSED" || target.id === id) {
+        return { error: "Choose another open sprint of the same line of business, or the backlog." };
+      }
+    }
+    // Save the final numbers before anything moves.
+    const analytics = await loadAnalytics({ asClosed: id });
+    const view = analytics.sprints.find((s) => s.id === id);
+    if (!view) return { error: "This sprint no longer exists." };
+
+    await db.$transaction(async (tx) => {
+      const items = await tx.workItem.findMany({ where: { sprintId: id, type: { in: ["STORY", "BUG"] } } });
+      const carried = items.filter((i) => i.status !== "DONE");
+      const result = { ...view.summary, carriedOverItems: carried.length };
+      await tx.sprintCommitment.updateMany({
+        where: { sprintId: id, workItemId: { in: carried.map((i) => i.id) } },
+        data: { carriedOver: true },
+      });
+      await tx.sprint.update({ where: { id }, data: { state: "CLOSED", closedAt: new Date(), result } });
+      for (const item of carried) await moveItemToSprint(tx, item.id, carryTo);
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteSprint(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const id = String(formData.get("id"));
+    const sprint = await db.sprint.findUnique({ where: { id }, include: { _count: { select: { items: true } } } });
+    if (!sprint) return { error: "This sprint no longer exists." };
+    if (sprint.state !== "PLANNED") return { error: "Only a planned sprint can be deleted. Active and closed sprints keep their history." };
+    await db.$transaction(async (tx) => {
+      const items = await tx.workItem.findMany({ where: { sprintId: id, type: { in: ["STORY", "BUG"] } } });
+      for (const i of items) await moveItemToSprint(tx, i.id, null);
+      await tx.sprint.delete({ where: { id } });
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  redirect("/sprints");
+}
+
+/** Plan a story/bug into a sprint, or take it out (sprintId = null). */
+export async function setItemSprint(itemId: string, sprintId: string | null): Promise<ActionState> {
+  await requireAuth();
+  try {
+    await db.$transaction((tx) => moveItemToSprint(tx, itemId, sprintId));
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Move a story/bug to the next planned sprint of its line of business. */
+export async function moveToNextSprint(itemId: string): Promise<ActionState> {
+  await requireAuth();
+  try {
+    await db.$transaction(async (tx) => {
+      const item = await tx.workItem.findUnique({ where: { id: itemId }, include: { parent: true } });
+      if (!item) throw new UserError("This item no longer exists.");
+      const story = item.type === "TASK" ? item.parent : item;
+      if (!story || !story.sprintId) throw new UserError("This item is not planned in a sprint.");
+      const current = await tx.sprint.findUniqueOrThrow({ where: { id: story.sprintId } });
+      const next = await tx.sprint.findFirst({
+        where: { lobId: current.lobId, state: "PLANNED", id: { not: current.id }, startDate: { gt: current.startDate } },
+        orderBy: { startDate: "asc" },
+      });
+      if (!next) throw new UserError("There is no later planned sprint. Create the next sprint first.");
+      await moveItemToSprint(tx, story.id, next.id);
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+const shareSchema = z.object({
+  sprintId: z.string().min(1),
+  memberId: z.string().min(1),
+  percent: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.number({ message: "Percent must be a number" }).min(0, "Percent cannot be negative").max(100, "Percent cannot exceed 100").nullable(),
+  ),
+});
+
+/** Override how much of a member's hours this sprint gets while sprints overlap. Empty = even split. */
+export async function saveSprintShare(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const d = shareSchema.parse(Object.fromEntries(formData.entries()));
+    if (d.percent == null) {
+      await db.sprintMemberShare.deleteMany({ where: { sprintId: d.sprintId, memberId: d.memberId } });
+    } else {
+      await db.sprintMemberShare.upsert({
+        where: { sprintId_memberId: { sprintId: d.sprintId, memberId: d.memberId } },
+        update: { percent: d.percent },
+        create: { sprintId: d.sprintId, memberId: d.memberId, percent: d.percent },
+      });
+    }
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Accept the current planned dates of tasks as their new baseline. Dates are recalculated here, never trusted from the browser. */
+export async function acceptBaseline(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const ids = formData.getAll("taskId").map(String).filter(Boolean);
+    if (ids.length === 0) return { error: "Nothing to accept." };
+    const analytics = await loadAnalytics();
+    for (const t of analytics.tasks.filter((x) => ids.includes(x.id))) {
+      if (!t.plan?.start || !t.plan.end) continue;
+      await db.taskBaseline.upsert({
+        where: { workItemId: t.id },
+        update: { baselineStart: t.plan.start, baselineEnd: t.plan.end, acceptedAt: new Date() },
+        create: { workItemId: t.id, baselineStart: t.plan.start, baselineEnd: t.plan.end },
+      });
+    }
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function resetBaseline(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    await db.taskBaseline.deleteMany({ where: { workItemId: String(formData.get("id")) } });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Change the assignee of a task from the timeline or board. */
+export async function quickAssign(taskId: string, memberId: string | null): Promise<ActionState> {
+  await requireAuth();
+  try {
+    await db.$transaction(async (tx) => {
+      const task = await tx.workItem.findUnique({ where: { id: taskId }, include: { lob: true } });
+      if (!task || task.type !== "TASK") throw new UserError("This task no longer exists.");
+      if (memberId) {
+        const ok = await tx.squadMembership.findFirst({ where: { memberId, squadId: task.lob.squadId } });
+        if (!ok) throw new UserError("The assignee must be a member of the squad that owns this line of business.");
+      }
+      if (task.assigneeId === memberId) return;
+      await tx.workItem.update({ where: { id: taskId }, data: { assigneeId: memberId } });
+      await tx.workItemHistory.create({ data: { workItemId: taskId, field: "assignee", oldValue: task.assigneeId, newValue: memberId } });
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Change a task's hour estimate (used from the timeline's re-estimate action). */
+export async function quickEstimate(taskId: string, hours: number | null): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const h = z.number().min(0).max(1000).nullable().parse(hours);
+    const task = await db.workItem.findUnique({ where: { id: taskId } });
+    if (!task || task.type !== "TASK") return { error: "This task no longer exists." };
+    if (task.estimateHours === h) return { ok: true };
+    await db.$transaction([
+      db.workItem.update({ where: { id: taskId }, data: { estimateHours: h } }),
+      db.workItemHistory.create({ data: { workItemId: taskId, field: "estimate", oldValue: task.estimateHours == null ? null : String(task.estimateHours), newValue: h == null ? null : String(h) } }),
+    ]);
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}

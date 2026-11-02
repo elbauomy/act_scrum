@@ -61,6 +61,10 @@ export async function deleteLob(_prev: ActionState, formData: FormData): Promise
     if (items > 0) {
       return { error: `Cannot delete: this line of business has ${items} work item(s). Delete them first.` };
     }
+    const [sprints, releases] = await Promise.all([db.sprint.count({ where: { lobId: id } }), db.release.count({ where: { lobId: id } })]);
+    if (sprints > 0 || releases > 0) {
+      return { error: `Cannot delete: this line of business has ${sprints} sprint(s) and ${releases} release(s). Delete them first.` };
+    }
     await db.lineOfBusiness.delete({ where: { id } });
   } catch (err) {
     return toActionError(err);
