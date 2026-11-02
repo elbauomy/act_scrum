@@ -158,6 +158,39 @@ export async function deleteSprint(_prev: ActionState, formData: FormData): Prom
   redirect("/sprints");
 }
 
+/**
+ * Delete the selected sprints. Only planned sprints can go (active, paused and closed sprints keep their history).
+ * Items in a deleted sprint go back to the backlog.
+ */
+export async function deleteSprints(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const ids = formData.getAll("id").map(String).filter(Boolean);
+    if (ids.length === 0) return { error: "Tick at least one sprint first." };
+    const sprints = await db.sprint.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, state: true, lob: { select: { key: true } } } });
+    const deletable = sprints.filter((s) => s.state === "PLANNED");
+    const skipped = sprints.filter((s) => s.state !== "PLANNED");
+    await db.$transaction(async (tx) => {
+      for (const sp of deletable) {
+        const items = await tx.workItem.findMany({ where: { sprintId: sp.id, type: { in: ["STORY", "BUG"] } }, select: { id: true } });
+        for (const i of items) await moveItemToSprint(tx, i.id, null);
+        await tx.sprint.delete({ where: { id: sp.id } });
+      }
+    });
+    refresh();
+    const base = `Deleted ${deletable.length} sprint${deletable.length === 1 ? "" : "s"}.`;
+    if (skipped.length === 0) return { ok: true, message: base };
+    return {
+      ok: deletable.length > 0,
+      error: deletable.length === 0 ? "Nothing was deleted. Only planned sprints can be deleted." : undefined,
+      message: deletable.length > 0 ? base : undefined,
+      details: skipped.map((s) => `${s.lob.key} ${s.name} was kept: it is ${s.state.toLowerCase()}, and active, paused and closed sprints keep their history.`),
+    };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /** Plan a story/bug into a sprint, or take it out (sprintId = null). */
 export async function setItemSprint(itemId: string, sprintId: string | null): Promise<ActionState> {
   await requireAuth();

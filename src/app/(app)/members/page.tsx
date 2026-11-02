@@ -2,7 +2,9 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { todayUTC } from "@/lib/dates";
-import { createMember } from "@/lib/actions/members";
+import { createMember, deleteMember, deleteMembers } from "@/lib/actions/members";
+import { BulkDeleteBar } from "@/components/bulk-delete";
+import { DeleteButton } from "@/components/ui/forms";
 import { ActionForm, SubmitButton } from "@/components/ui/forms";
 import { Badge, Card, Empty, Field, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 
@@ -52,14 +54,18 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
           {members.length === 0 ? (
             <Empty>No members match these filters.</Empty>
           ) : (
+            <>
+            <BulkDeleteBar formId="bulk-members" action={deleteMembers} noun="member" warning="Their tasks become unassigned, and their squad hours, leave and standup notes are removed. This cannot be undone." />
             <Table>
               <thead>
                 <tr>
+                  <Th className="w-8" />
                   <Th>Name</Th>
                   <Th>Role</Th>
                   <Th>Squads (hours / week)</Th>
                   <Th>Total / week</Th>
                   <Th>Status</Th>
+                  <Th />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -67,6 +73,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                   const onLeave = m.leaves.some((l) => l.startDate <= today && l.endDate >= today);
                   return (
                     <tr key={m.id}>
+                      <Td><input type="checkbox" name="id" value={m.id} form="bulk-members" aria-label={`Select ${m.name}`} /></Td>
                       <Td>
                         <Link href={`/members/${m.id}`} className="font-medium text-orange-700 hover:underline">{m.name}</Link>
                       </Td>
@@ -84,11 +91,15 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                         {m.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}
                         {onLeave && <Badge tone="amber">On leave</Badge>}
                       </Td>
+                      <Td className="text-right">
+                        <DeleteButton action={deleteMember} id={m.id} label="Delete" confirmText={`Delete ${m.name}? Their tasks become unassigned, and their squad hours, leave and standup notes are removed. This cannot be undone.`} />
+                      </Td>
                     </tr>
                   );
                 })}
               </tbody>
             </Table>
+            </>
           )}
         </Card>
 

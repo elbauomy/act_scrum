@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import type { BacklogRow } from "@/lib/backlog";
-import { reorderWorkItems } from "@/lib/actions/work-items";
+import { deleteWorkItems, reorderWorkItems } from "@/lib/actions/work-items";
+import type { ActionState } from "@/lib/action-state";
 import { statusesFor } from "@/lib/work-items";
 import { cn } from "@/components/ui";
 import { PriorityLabel, ProgressBar, TypeBadge, formatHours } from "./badges";
@@ -15,6 +16,8 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
   const [overId, setOverId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<ActionState | null>(null);
 
   // Hide rows whose ancestor is collapsed.
   const visible = useMemo(() => {
@@ -59,6 +62,33 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
     });
   }
 
+  /** Ticking a row also ticks everything under it (its children, their children...), and unticking clears them again. */
+  function toggleSelect(row: BacklogRow, on: boolean) {
+    const index = rows.findIndex((r) => r.id === row.id);
+    const ids = [row.id];
+    for (let i = index + 1; i < rows.length && rows[i].depth > row.depth; i++) ids.push(rows[i].id);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+    setResult(null);
+  }
+
+  function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} item${ids.length === 1 ? "" : "s"}? An item with children is only deleted when all of its children are ticked too. This cannot be undone.`)) return;
+    startTransition(async () => {
+      const res = await deleteWorkItems(ids);
+      setResult(res);
+      if (res.ok) setSelected(new Set());
+    });
+  }
+
   const parents = rows.filter((r) => r.childCount > 0).map((r) => r.id);
 
   return (
@@ -76,11 +106,39 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
             : "Clear the item filters to change the order."}
         </span>
         {error && <span role="alert" className="text-red-600">{error}</span>}
+        <span className="mx-1 text-slate-300">|</span>
+        <button type="button" className="hover:text-orange-700" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>Select all</button>
+        {selected.size > 0 && (
+          <>
+            <button type="button" className="hover:text-orange-700" onClick={() => setSelected(new Set())}>Clear selection</button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={deleteSelected}
+              className="rounded-md border border-red-300 bg-white px-2 py-1 font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              {pending ? "Deleting…" : `Delete selected (${selected.size})`}
+            </button>
+          </>
+        )}
       </div>
+      {result?.error && (
+        <div role="alert" className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>{result.error}</p>
+          {result.details && <ul className="mt-1 list-disc pl-5 text-xs">{result.details.map((d) => <li key={d}>{d}</li>)}</ul>}
+        </div>
+      )}
+      {result?.ok && result.message && (
+        <div role="status" className="mb-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+          <p>{result.message}</p>
+          {result.details && <ul className="mt-1 list-disc pl-5 text-xs text-amber-800">{result.details.map((d) => <li key={d}>{d}</li>)}</ul>}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <th className="w-6" />
               {canReorder && <th className="w-6" />}
               <th className="px-2 py-2 font-semibold">Item</th>
               <th className="px-2 py-2 font-semibold">Status</th>
@@ -114,6 +172,14 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
                     overId === r.id && "bg-orange-50 outline outline-2 outline-orange-300",
                   )}
                 >
+                  <td className="w-6 pl-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={(e) => toggleSelect(r, e.target.checked)}
+                      aria-label={`Select ${r.key}`}
+                    />
+                  </td>
                   {canReorder && (
                     <td className="w-6 pl-1">
                       <span

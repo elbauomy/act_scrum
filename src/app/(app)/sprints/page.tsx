@@ -3,6 +3,8 @@ import { loadAnalytics, sprintLengthFor } from "@/lib/analytics";
 import { formatDate, toISODate } from "@/lib/dates";
 import { applyCls, dateParam, selectCls } from "@/lib/filters";
 import { NewSprintForm } from "@/components/new-sprint-form";
+import { BulkDeleteBar } from "@/components/bulk-delete";
+import { deleteSprints } from "@/lib/actions/sprints";
 import { HealthBadge, SprintStateBadge, fmtH } from "@/components/sprint-ui";
 import { Card, Empty, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
 
@@ -70,9 +72,12 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
           {sprints.length === 0 ? (
             <Empty>No sprints match these filters.</Empty>
           ) : (
+            <>
+            <BulkDeleteBar formId="bulk-sprints" action={deleteSprints} noun="sprint" warning="Their stories and bugs go back to the backlog. Only planned sprints can be deleted; others are kept. This cannot be undone." />
             <Table>
               <thead>
                 <tr>
+                  <Th className="w-8" />
                   <Th>Sprint</Th>
                   <Th>Line of Business</Th>
                   <Th>Dates</Th>
@@ -87,6 +92,9 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
               <tbody className="divide-y divide-slate-100">
                 {sprints.map((s) => (
                   <tr key={s.id}>
+                    <Td>
+                      <input type="checkbox" name="id" value={s.id} form="bulk-sprints" disabled={s.state !== "PLANNED"} aria-label={`Select ${s.name}`} title={s.state === "PLANNED" ? undefined : "Only planned sprints can be deleted"} />
+                    </Td>
                     <Td><Link href={`/sprints/${s.id}`} className="font-medium text-orange-700 hover:underline">{s.name}</Link></Td>
                     <Td>
                       <span className="font-mono text-xs text-slate-500">{s.lobKey}</span> {s.lobName}
@@ -103,7 +111,9 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
                 ))}
               </tbody>
             </Table>
+            </>
           )}
+          <p className="mt-3 text-xs text-slate-500">Only planned sprints can be ticked for deletion; active, paused and closed sprints keep their history.</p>
         </Card>
 
         <Card title="New sprint">

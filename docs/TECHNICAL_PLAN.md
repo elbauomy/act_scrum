@@ -176,6 +176,14 @@ edited, have items moved, or be closed (closing ends the pause). A closed sprint
 day's hours (from `TaskPlan.byDay`, in schedule order), plus the tasks finished that day and the member's weekend, holiday or leave. Filters: squad, line of business,
 member, sprint, release, start date, number of days (1–28), members with no work, weekends and holidays. Excel export at `/api/export/daily-plan`.
 
+### Deleting
+
+`deleteMember` / `deleteMembers` (members cascade to squad hours, leave, sprint plans and standup notes; their tasks are unassigned),
+`deleteSprints` (planned sprints only; items return to the backlog through `moveItemToSprint`; others are reported and kept) and
+`deleteWorkItems` (an item is deleted only if all of its children are deleted in the same request; children go first, one level at a time).
+Tables use `BulkDeleteBar` (checkboxes tied to one form with `form="bulk-..." name="id"`, so the tables stay server components); the backlog tree keeps its own selection
+and selects an item's whole subtree when it is ticked.
+
 ### Sprint planning import
 
 The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Release 6 - Sprint 62"). Uploading it

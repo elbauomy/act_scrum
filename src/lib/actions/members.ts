@@ -166,3 +166,18 @@ export async function saveLobAllocations(_prev: ActionState, formData: FormData)
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/** Delete the selected members. Their tasks become unassigned; their squad hours, leave, sprint capacity and standup notes are removed with them. */
+export async function deleteMembers(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const ids = formData.getAll("id").map(String).filter(Boolean);
+    if (ids.length === 0) return { error: "Tick at least one member first." };
+    const found = await db.member.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    await db.member.deleteMany({ where: { id: { in: found.map((m) => m.id) } } });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Deleted ${found.length} member${found.length === 1 ? "" : "s"}.` };
+  } catch (err) {
+    return toActionError(err);
+  }
+}

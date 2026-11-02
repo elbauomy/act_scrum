@@ -26,6 +26,12 @@ Open the member and add them to every squad they work in, with hours per week fo
 ## When the team has to stop (pause a sprint)
 Open the sprint → **Sprint status** → **Pause sprint**, choose the day it stopped and add the reason. While paused, its tasks are left out of the timeline and the sprint takes no share of anyone's hours. When work starts again, choose **Resume sprint**: tick *Move the end date out* to give the team back the working days they lost. The sprint page keeps a list of every pause. **Edit sprint** (button at the top of the sprint page, or *Edit* in the sprint list) changes the name, dates, goal and release.
 
+## Cleaning up (delete one or many)
+- **Members**: each row has a **Delete** button, and you can tick several rows (or *Select all*) and click **Delete selected**. Their tasks stay and become unassigned; their squad hours, leave, sprint capacity and standup notes are removed.
+- **Sprints**: tick planned sprints and click **Delete selected**. Their stories and bugs go back to the backlog. Active, paused and closed sprints cannot be ticked because they hold history.
+- **Backlog**: tick items (ticking a story, feature or epic also ticks everything under it) and click **Delete selected**. An item with children is only deleted when all of its children are ticked too; otherwise it is kept and listed.
+Everything asks for confirmation first, and deleting cannot be undone, so download a backup from *Import & Backup* before a big clean-up.
+
 ## Every day
 - **Daily Standup** — choose the squad and the date (today is selected for you), then type each person's status and Save. If someone is not working that day, tick **Off today** on their card (with an optional reason): their status boxes are hidden, the top of the page shows who is present and who is off, and a day of leave is added so capacity and the timeline plan around it. Unticking removes that leave again. *Add task activity to the status* inserts what they finished and have in progress, if you want it.
 - **Sprint Board** — drag tasks between New / In Progress / Done. Switch to *Columns: member* and drag a task to reassign it.

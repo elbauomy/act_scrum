@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { type ActionState, toActionError } from "@/lib/action-state";
-import { PARENT_TYPES, PRIORITIES, TYPES, nextRank, statusesFor, TYPE_LABEL, validateParent } from "@/lib/work-items";
+import { PARENT_TYPES, PRIORITIES, TYPES, itemKey, nextRank, statusesFor, TYPE_LABEL, validateParent } from "@/lib/work-items";
 
 type Tx = Prisma.TransactionClient;
 
@@ -263,4 +263,52 @@ export async function deleteWorkItem(_prev: ActionState, formData: FormData): Pr
   }
   refresh();
   redirect(backTo);
+}
+
+/**
+ * Delete the selected backlog items. An item with children is only deleted when all of its children are selected too
+ * (select a parent and its whole tree, or just the leaves). Anything else is kept and listed.
+ */
+export async function deleteWorkItems(ids: string[]): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const wanted = z.array(z.string().min(1)).max(3000).parse(ids);
+    if (wanted.length === 0) return { error: "Tick at least one item first." };
+    const items = await db.workItem.findMany({
+      where: { id: { in: wanted } },
+      select: { id: true, number: true, title: true, lob: { select: { key: true } }, children: { select: { id: true } } },
+    });
+    // Keep only items whose children are all going too.
+    const going = new Set(items.map((i) => i.id));
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const i of items) {
+        if (going.has(i.id) && i.children.some((c) => !going.has(c.id))) {
+          going.delete(i.id);
+          changed = true;
+        }
+      }
+    }
+    await db.$transaction(async (tx) => {
+      // Children before parents, one level at a time.
+      let remaining = new Set(going);
+      while (remaining.size > 0) {
+        const leaves = items.filter((i) => remaining.has(i.id) && i.children.every((c) => !remaining.has(c.id))).map((i) => i.id);
+        if (leaves.length === 0) break;
+        await tx.workItem.deleteMany({ where: { id: { in: leaves } } });
+        remaining = new Set([...remaining].filter((id) => !leaves.includes(id)));
+      }
+    });
+    const kept = items.filter((i) => !going.has(i.id));
+    refresh();
+    const deleted = going.size;
+    return {
+      ok: deleted > 0,
+      message: deleted > 0 ? `Deleted ${deleted} item${deleted === 1 ? "" : "s"}.` : undefined,
+      error: deleted === 0 ? "Nothing was deleted: the selected items have children that were not selected." : undefined,
+      details: kept.length ? kept.map((i) => `${itemKey(i.lob.key, i.number)} ${i.title} was kept: it has children that were not selected.`) : undefined,
+    };
+  } catch (err) {
+    return fail(err);
+  }
 }
