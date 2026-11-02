@@ -6,7 +6,7 @@ export function cn(...classes: (string | false | null | undefined)[]) {
 }
 
 const buttonStyles = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300",
+  primary: "bg-orange-600 text-white hover:bg-orange-700 disabled:bg-orange-300",
   secondary: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50",
   danger: "bg-white text-red-600 border border-red-300 hover:bg-red-50",
 };
@@ -46,7 +46,7 @@ export function LinkButton({
 }
 
 const fieldStyles =
-  "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+  "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(fieldStyles, className)} {...props} />;
@@ -116,13 +116,13 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-sm text-slate-500">{children}</p>;
 }
 
-export function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "green" | "amber" | "red" | "indigo" }) {
+export function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "green" | "amber" | "red" | "orange" }) {
   const tones = {
     slate: "bg-slate-100 text-slate-700",
     green: "bg-green-100 text-green-800",
     amber: "bg-amber-100 text-amber-800",
     red: "bg-red-100 text-red-700",
-    indigo: "bg-indigo-100 text-indigo-700",
+    orange: "bg-orange-100 text-orange-700",
   };
   return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", tones[tone])}>{children}</span>;
 }

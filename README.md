@@ -1,6 +1,6 @@
-# ACT Scrum
+# Solo Scrum
 
-A web tool for the ACT Scrum Master to manage squads, lines of business, members, sprints,
+A personal web tool for a Scrum Master to manage squads, lines of business, members, sprints,
 releases, the timeline and Scrum reports, following ACT's own process.
 
 - Product scope: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)
@@ -11,28 +11,28 @@ releases, the timeline and Scrum reports, following ACT's own process.
 | Phase | Status |
 |---|---|
 | 1. Foundation: login, settings, holidays, squads, LOBs, members, squad hours, leave | ✅ Done |
-| 2. Work items | Planned |
+| 2. Work items: hierarchy, IDs, statuses, hours, assignment, priority/rank, blocked, history, backlog filters | ✅ Done |
 | 3. Sprints & releases | Planned |
 | 4. Timeline | Planned |
 | 5. Daily standup | Planned |
 | 6. Reports & health dashboard | Planned |
 | 7. Excel import | Planned (waiting for sample sheet) |
 
-## Deploying for free (Neon + Netlify)
+## Deploying for free (Neon + Vercel)
 
-### 1. Create the database on Neon
+The app runs on **Vercel** (Hobby plan). The database is on **Neon** (free plan, London).
+Netlify also works (`netlify.toml` is kept), but `*.netlify.app` addresses are blocked on the owner's networks.
 
-1. Sign in at <https://console.neon.tech> and click **New project**.
-2. Name it `act-scrum`, pick a region, and click **Create**.
-3. On the project dashboard, click **Connect**. You need two connection strings:
-   - With **Connection pooling ON**, copy the string. This is your `DATABASE_URL`.
-   - With **Connection pooling OFF**, copy the string. This is your `DIRECT_URL`.
+### 1. Database on Neon
 
-### 2. Create the site on Netlify
+In <https://console.neon.tech>, open the project and click **Connect**:
+- The string whose host contains `-pooler` (Neon calls it `DATABASE_URL_POOLED`) is our **`DATABASE_URL`**.
+- The string **without** `-pooler` (Neon calls it `DATABASE_URL`) is our **`DIRECT_URL`**.
 
-1. Sign in at <https://app.netlify.com> → **Add new project** → **Import an existing project** → **GitHub**.
-2. Choose the `act_scrum` repository and the branch to publish (normally `main`).
-3. Before deploying, open **Environment variables** and add:
+### 2. Project on Vercel
+
+1. In <https://vercel.com/new>, sign in with GitHub and import the `act_scrum` repository.
+2. Add these environment variables:
 
 | Key | Value |
 |---|---|
@@ -41,16 +41,10 @@ releases, the timeline and Scrum reports, following ACT's own process.
 | `APP_PASSWORD` | The password you will use to sign in |
 | `SESSION_SECRET` | Any random text of at least 32 characters |
 
-4. Click **Deploy**. The build creates the database tables automatically.
-5. Open the site address Netlify gives you and sign in with your `APP_PASSWORD`.
+3. Click **Deploy**. `vercel.json` makes each build apply database changes first.
 
-To change the password later, edit `APP_PASSWORD` in Netlify and redeploy.
-
-## Deploying on Vercel (alternative)
-
-`vercel.json` is included. In <https://vercel.com/new>, import the `act_scrum` repository and add the
-same four environment variables (`DATABASE_URL`, `DIRECT_URL`, `APP_PASSWORD`, `SESSION_SECRET`)
-before clicking **Deploy**. The build creates and updates the database tables automatically.
+Every merge to `main` redeploys automatically. To change the password, edit `APP_PASSWORD` in
+Vercel → Settings → Environment Variables, then redeploy.
 
 ## Running locally (developers)
 

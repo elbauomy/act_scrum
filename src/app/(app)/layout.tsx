@@ -8,8 +8,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <div className="flex min-h-screen flex-col md:flex-row">
       <aside className="border-b border-slate-200 bg-white md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 px-5 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-600 text-sm font-bold text-white">A</div>
-          <span className="font-semibold text-slate-900">ACT Scrum</span>
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-600 text-sm font-bold text-white">S</div>
+          <span className="font-semibold text-slate-900">Solo Scrum</span>
         </div>
         <div className="px-2 pb-4">
           <Nav />

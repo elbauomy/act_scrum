@@ -1,4 +1,4 @@
-# ACT Scrum — Product Plan (agreed scope)
+# Solo Scrum — Product Plan (agreed scope)
 
 A web tool for the ACT Scrum Master to manage squads, lines of business, work items, sprints,
 releases, the timeline and reports, following ACT's own process rather than standard Scrum.
@@ -18,11 +18,13 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Working calendar | Working days, hours per day and holidays are all set in Settings |
 | Timeline | Built automatically from assignee availability only (no dependencies). Slips are shown, and nothing changes until the Scrum Master acts. |
 | Priority | High / Medium / Low + drag-to-rank |
+| Item IDs | Per-LOB code + number, e.g. RB-12 |
+| Look | Orange theme; show/hide password on login |
 | Daily standup | Yesterday / Today / Blockers per member, filterable by squad, date and member |
 | Filters | On home dashboard, backlog, sprint board, timeline, reports and standup |
 | Export | Excel + PDF for every report, Excel for lists, full backup |
 | Language | English only |
-| Hosting | 100% free: Netlify + Neon + GitHub |
+| Hosting | 100% free: Vercel (Hobby) + Neon + GitHub. `*.netlify.app` is blocked on the owner's networks. |
 | Import | Excel import postponed until a sample sheet is shared |
 
 ## Phases

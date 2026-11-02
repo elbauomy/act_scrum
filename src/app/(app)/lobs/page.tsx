@@ -16,7 +16,7 @@ export default async function LobsPage({ searchParams }: PageProps<"/lobs">) {
         ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
       },
       orderBy: { name: "asc" },
-      include: { squad: true },
+      include: { squad: true, _count: { select: { workItems: true } } },
     }),
     db.squad.findMany({ orderBy: { name: "asc" } }),
     getSettings(),
@@ -48,20 +48,26 @@ export default async function LobsPage({ searchParams }: PageProps<"/lobs">) {
             <Table>
               <thead>
                 <tr>
+                  <Th>Code</Th>
                   <Th>Name</Th>
                   <Th>Squad</Th>
+                  <Th>Items</Th>
                   <Th>Sprint length</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {lobs.map((l) => (
                   <tr key={l.id}>
+                    <Td className="font-mono text-xs font-semibold">{l.key}</Td>
                     <Td>
-                      <Link href={`/lobs/${l.id}`} className="font-medium text-indigo-700 hover:underline">{l.name}</Link>
+                      <Link href={`/lobs/${l.id}`} className="font-medium text-orange-700 hover:underline">{l.name}</Link>
                       {l.description && <div className="text-xs text-slate-500">{l.description}</div>}
                     </Td>
                     <Td>
                       <Link href={`/squads/${l.squad.id}`} className="hover:underline">{l.squad.name}</Link>
+                    </Td>
+                    <Td>
+                      <Link href={`/backlog?lob=${l.id}`} className="hover:underline">{l._count.workItems}</Link>
                     </Td>
                     <Td>
                       {effectiveSprintLength(l.sprintLengthDays, l.squad.sprintLengthDays, settings.defaultSprintLengthDays)} days

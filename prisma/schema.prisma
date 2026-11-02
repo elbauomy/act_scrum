@@ -47,8 +47,13 @@ model LineOfBusiness {
   squad            Squad    @relation(fields: [squadId], references: [id], onDelete: Restrict)
   /// Overrides the squad / system sprint length (days)
   sprintLengthDays Int?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  /// Short code used in item IDs, e.g. "RB" -> RB-12
+  key              String     @unique
+  /// Next item number to hand out in this LOB
+  nextItemNumber   Int        @default(1)
+  workItems        WorkItem[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   @@index([squadId])
 }
@@ -61,6 +66,7 @@ model Member {
   active      Boolean           @default(true)
   memberships SquadMembership[]
   leaves      Leave[]
+  assignments WorkItem[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 }
@@ -89,4 +95,79 @@ model Leave {
   createdAt DateTime @default(now())
 
   @@index([memberId])
+}
+
+enum WorkItemType {
+  EPIC
+  FEATURE
+  STORY
+  BUG
+  TASK
+}
+
+/// Story/Bug: NEW, APPROVED, COMMITTED, DONE. Task: NEW, IN_PROGRESS, DONE.
+/// Epic/Feature progress is calculated from their children; their status stays NEW.
+enum WorkItemStatus {
+  NEW
+  APPROVED
+  COMMITTED
+  IN_PROGRESS
+  DONE
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model WorkItem {
+  id                 String          @id @default(cuid())
+  type               WorkItemType
+  /// Sequential number inside the LOB (shown as KEY-number)
+  number             Int
+  title              String
+  description        String          @default("")
+  acceptanceCriteria String          @default("")
+  status             WorkItemStatus  @default(NEW)
+  priority           Priority        @default(MEDIUM)
+  /// Manual order among siblings (lower comes first)
+  rank               Float           @default(0)
+  lobId              String
+  lob                LineOfBusiness  @relation(fields: [lobId], references: [id], onDelete: Restrict)
+  parentId           String?
+  parent             WorkItem?       @relation("WorkItemTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children           WorkItem[]      @relation("WorkItemTree")
+  /// Tasks only
+  assigneeId         String?
+  assignee           Member?         @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  /// Tasks only
+  estimateHours      Float?
+  blocked            Boolean         @default(false)
+  blockedReason      String          @default("")
+  /// Set when status becomes DONE, cleared when it leaves DONE
+  doneAt             DateTime?
+  history            WorkItemHistory[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([lobId, number])
+  @@index([parentId])
+  @@index([assigneeId])
+  @@index([lobId, type])
+}
+
+/// One row per changed field, used for audit and for reports (cycle time, burndown).
+model WorkItemHistory {
+  id         String   @id @default(cuid())
+  workItemId String
+  workItem   WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  /// created, title, status, priority, assignee, estimate, blocked, parent
+  field      String
+  oldValue   String?
+  newValue   String?
+  changedAt  DateTime @default(now())
+
+  @@index([workItemId, changedAt])
+  @@index([field, changedAt])
 }

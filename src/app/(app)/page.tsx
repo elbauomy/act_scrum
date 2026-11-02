@@ -72,7 +72,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       <Card title="Squad capacity this week">
         {rows.length === 0 ? (
           <Empty>
-            No squads yet. <Link className="text-indigo-600 underline" href="/squads">Create your first squad</Link>.
+            No squads yet. <Link className="text-orange-600 underline" href="/squads">Create your first squad</Link>.
           </Empty>
         ) : (
           <Table>
@@ -90,7 +90,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               {rows.map((r) => (
                 <tr key={r.squad.id}>
                   <Td>
-                    <Link className="font-medium text-indigo-700 hover:underline" href={`/squads/${r.squad.id}`}>
+                    <Link className="font-medium text-orange-700 hover:underline" href={`/squads/${r.squad.id}`}>
                       {r.squad.name}
                     </Link>
                   </Td>
