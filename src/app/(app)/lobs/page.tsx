@@ -6,6 +6,7 @@ import { createLob } from "@/lib/actions/lobs";
 import { ActionForm, SubmitButton } from "@/components/ui/forms";
 import { Card, Empty, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
 import { LobFields } from "@/components/entity-fields";
+import { EditOnly } from "@/components/edit-only";
 
 export default async function LobsPage({ searchParams }: PageProps<"/lobs">) {
   const { squad, q } = (await searchParams) as { squad?: string; q?: string };
@@ -84,6 +85,7 @@ export default async function LobsPage({ searchParams }: PageProps<"/lobs">) {
           )}
         </Card>
 
+        <EditOnly>
         <Card title="Add line of business">
           {squads.length === 0 ? (
             <Empty>
@@ -96,6 +98,7 @@ export default async function LobsPage({ searchParams }: PageProps<"/lobs">) {
             </ActionForm>
           )}
         </Card>
+        </EditOnly>
       </div>
     </>
   );

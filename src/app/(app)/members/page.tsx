@@ -7,8 +7,10 @@ import { BulkDeleteBar } from "@/components/bulk-delete";
 import { DeleteButton } from "@/components/ui/forms";
 import { ActionForm, SubmitButton } from "@/components/ui/forms";
 import { Badge, Card, Empty, Field, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
+import { EditOnly, canEdit } from "@/components/edit-only";
 
 export default async function MembersPage({ searchParams }: PageProps<"/members">) {
+  const edit = await canEdit();
   const { squad, status = "active", q } = (await searchParams) as { squad?: string; status?: string; q?: string };
   const [members, squads, settings] = await Promise.all([
     db.member.findMany({
@@ -59,13 +61,13 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
             <Table>
               <thead>
                 <tr>
-                  <Th className="w-8" />
+                  {edit && <Th className="w-8" />}
                   <Th>Name</Th>
                   <Th>Role</Th>
                   <Th>Squads (hours / week)</Th>
                   <Th>Total / week</Th>
                   <Th>Status</Th>
-                  <Th />
+                  {edit && <Th />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -73,7 +75,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                   const onLeave = m.leaves.some((l) => l.startDate <= today && l.endDate >= today);
                   return (
                     <tr key={m.id}>
-                      <Td><input type="checkbox" name="id" value={m.id} form="bulk-members" aria-label={`Select ${m.name}`} /></Td>
+                      {edit && <Td><input type="checkbox" name="id" value={m.id} form="bulk-members" aria-label={`Select ${m.name}`} /></Td>}
                       <Td>
                         <Link href={`/members/${m.id}`} className="font-medium text-orange-700 hover:underline">{m.name}</Link>
                       </Td>
@@ -91,9 +93,9 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                         {m.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}
                         {onLeave && <Badge tone="amber">On leave</Badge>}
                       </Td>
-                      <Td className="text-right">
+                      {edit && <Td className="text-right">
                         <DeleteButton action={deleteMember} id={m.id} label="Delete" confirmText={`Delete ${m.name}? Their tasks become unassigned, and their squad hours, leave and standup notes are removed. This cannot be undone.`} />
-                      </Td>
+                      </Td>}
                     </tr>
                   );
                 })}
@@ -103,6 +105,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
           )}
         </Card>
 
+        <EditOnly>
         <Card title="Add member">
           <ActionForm action={createMember} className="space-y-3" successMessage="Member added.">
             <Field label="Name">
@@ -125,6 +128,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
             <SubmitButton>Add member</SubmitButton>
           </ActionForm>
         </Card>
+        </EditOnly>
       </div>
     </>
   );

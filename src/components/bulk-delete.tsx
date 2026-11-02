@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import type { ActionState } from "@/lib/action-state";
 import { Button } from "@/components/ui";
+import { useReadOnly } from "@/components/role-provider";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -13,6 +14,7 @@ type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 export function BulkDeleteBar({ formId, action, noun, warning }: { formId: string; action: Action; noun: string; warning: string }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [count, setCount] = useState(0);
+  const readOnly = useReadOnly();
   const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(`input[form="${formId}"][name="id"]`));
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export function BulkDeleteBar({ formId, action, noun, warning }: { formId: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
 
+  if (readOnly) return null;
   const total = typeof document === "undefined" ? 0 : boxes().filter((b) => !b.disabled).length;
 
   return (

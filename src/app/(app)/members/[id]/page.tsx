@@ -15,6 +15,7 @@ import {
 import { ActionForm, DeleteButton, SubmitButton } from "@/components/ui/forms";
 import { LobSplitForm } from "@/components/lob-split-form";
 import { Badge, Card, Empty, Field, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
+import { EditOnly } from "@/components/edit-only";
 
 const WEEKS_AHEAD = 4;
 
@@ -77,6 +78,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
             </div>
           </Card>
 
+          <EditOnly>
           <Card title="Add leave">
             <ActionForm action={addLeave} className="space-y-3" successMessage="Leave added.">
               <input type="hidden" name="memberId" value={member.id} />
@@ -94,6 +96,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
               <SubmitButton>Add leave</SubmitButton>
             </ActionForm>
           </Card>
+          </EditOnly>
         </div>
 
         <div className="space-y-6">
@@ -132,6 +135,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
               </Table>
             )}
             {available.length > 0 && (
+              <EditOnly>
               <ActionForm action={saveMembership} className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-[1fr_8rem_auto] sm:items-end">
                 <input type="hidden" name="memberId" value={member.id} />
                 <Field label="Add to squad">
@@ -147,6 +151,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
                 </Field>
                 <SubmitButton>Add</SubmitButton>
               </ActionForm>
+              </EditOnly>
             )}
           </Card>
 

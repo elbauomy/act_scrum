@@ -1,6 +1,6 @@
 import { login } from "@/lib/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/ui/forms";
-import { Field } from "@/components/ui";
+import { Field, Input } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/password-input";
 
 export const metadata = { title: "Sign in · Solo Scrum" };
@@ -15,8 +15,11 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-slate-500">Sign in to continue</p>
         </div>
         <ActionForm action={login} className="space-y-4" resetOnSuccess={false}>
+          <Field label="User name">
+            <Input name="username" required autoFocus autoComplete="username" autoCapitalize="none" spellCheck={false} />
+          </Field>
           <Field label="Password">
-            <PasswordInput name="password" required autoFocus autoComplete="current-password" />
+            <PasswordInput name="password" required autoComplete="current-password" />
           </Field>
           <SubmitButton className="w-full">Sign in</SubmitButton>
         </ActionForm>

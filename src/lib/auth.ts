@@ -1,26 +1,13 @@
 import "server-only";
-import { timingSafeEqual, createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {
-  SESSION_COOKIE,
-  SESSION_MAX_AGE_SECONDS,
-  createSessionToken,
-  isValidSessionToken,
-} from "./session";
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, createSessionToken, readSession, type SessionData } from "./session";
+import type { Account } from "./credentials";
+import { ForbiddenError } from "./forbidden";
 
-/** Compare the typed password with APP_PASSWORD in constant time. */
-export function checkPassword(input: string): boolean {
-  const expected = process.env.APP_PASSWORD;
-  if (!expected) throw new Error("APP_PASSWORD is not set");
-  const a = createHash("sha256").update(input).digest();
-  const b = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(a, b);
-}
-
-export async function startSession(): Promise<void> {
+export async function startSession(account: Account): Promise<void> {
   const store = await cookies();
-  store.set(SESSION_COOKIE, await createSessionToken(), {
+  store.set(SESSION_COOKIE, await createSessionToken(account.role, account.username), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -33,8 +20,23 @@ export async function endSession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-/** Call at the top of every Server Action and protected page. */
+/** Who is signed in (null when nobody). */
+export async function getSession(): Promise<SessionData | null> {
+  return readSession((await cookies()).get(SESSION_COOKIE)?.value);
+}
+
+/** For pages and downloads that anyone signed in may see (the owner and the view-only user). */
+export async function requireSession(): Promise<SessionData> {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return session;
+}
+
+/**
+ * Call at the top of every Server Action: only the owner may change anything.
+ * Someone not signed in goes to the login page; the view-only user is refused.
+ */
 export async function requireAuth(): Promise<void> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!(await isValidSessionToken(token))) redirect("/login");
+  const session = await requireSession();
+  if (session.role !== "admin") throw new ForbiddenError();
 }

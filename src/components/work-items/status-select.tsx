@@ -5,6 +5,7 @@ import type { WorkItemStatus } from "@prisma/client";
 import { setWorkItemStatus } from "@/lib/actions/work-items";
 import { STATUS_LABEL } from "@/lib/work-items";
 import { cn } from "@/components/ui";
+import { useReadOnly } from "@/components/role-provider";
 
 /** Status dropdown that saves as soon as it changes. */
 export function StatusSelect({
@@ -21,23 +22,29 @@ export function StatusSelect({
   const [value, setValue] = useState(status);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const readOnly = useReadOnly();
 
   return (
     <span className="inline-flex items-center gap-1">
       <select
         aria-label="Status"
         value={value}
-        disabled={pending}
+        disabled={pending || readOnly}
         onChange={(e) => {
           const next = e.target.value as WorkItemStatus;
           const previous = value;
           setValue(next);
           setError(null);
           startTransition(async () => {
-            const res = await setWorkItemStatus(id, next);
-            if (res.error) {
+            try {
+              const res = await setWorkItemStatus(id, next);
+              if (res.error) {
+                setValue(previous);
+                setError(res.error);
+              }
+            } catch {
               setValue(previous);
-              setError(res.error);
+              setError("This change was not saved. You may be signed out, or this is a view-only account.");
             }
           });
         }}

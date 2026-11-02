@@ -12,20 +12,29 @@ function secretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSessionToken(): Promise<string> {
-  return new SignJWT({ role: "admin" })
+export type SessionRole = "admin" | "viewer";
+export type SessionData = { role: SessionRole; name: string };
+
+export async function createSessionToken(role: SessionRole, name: string): Promise<string> {
+  return new SignJWT({ role, name })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
     .sign(secretKey());
 }
 
-export async function isValidSessionToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+/** Who is signed in, or null when the token is missing, forged or expired. */
+export async function readSession(token: string | undefined): Promise<SessionData | null> {
+  if (!token) return null;
   try {
-    await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    return true;
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
+    if (payload.role !== "admin" && payload.role !== "viewer") return null;
+    return { role: payload.role, name: typeof payload.name === "string" && payload.name ? payload.name : "khaled elbauomy" };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function isValidSessionToken(token: string | undefined): Promise<boolean> {
+  return (await readSession(token)) != null;
 }

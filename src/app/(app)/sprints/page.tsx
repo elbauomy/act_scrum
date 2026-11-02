@@ -7,10 +7,12 @@ import { BulkDeleteBar } from "@/components/bulk-delete";
 import { deleteSprints } from "@/lib/actions/sprints";
 import { HealthBadge, SprintStateBadge, fmtH } from "@/components/sprint-ui";
 import { Card, Empty, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
+import { EditOnly, canEdit } from "@/components/edit-only";
 
 type Q = { squad?: string; lob?: string; state?: string; release?: string; from?: string; to?: string; q?: string };
 
 export default async function SprintsPage({ searchParams }: PageProps<"/sprints">) {
+  const edit = await canEdit();
   const f = (await searchParams) as Q;
   const a = await loadAnalytics();
   const from = dateParam(f.from);
@@ -33,7 +35,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
 
   return (
     <>
-      <PageHeader title="Sprints" description="Each line of business runs its own sprints. Sprints may overlap." actions={<LinkButton href="/sprints/import" variant="primary">Import sprint planning</LinkButton>} />
+      <PageHeader title="Sprints" description="Each line of business runs its own sprints. Sprints may overlap." actions={edit ? <LinkButton href="/sprints/import" variant="primary">Import sprint planning</LinkButton> : undefined} />
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-2">
@@ -77,7 +79,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
             <Table>
               <thead>
                 <tr>
-                  <Th className="w-8" />
+                  {edit && <Th className="w-8" />}
                   <Th>Sprint</Th>
                   <Th>Line of Business</Th>
                   <Th>Dates</Th>
@@ -86,15 +88,17 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
                   <Th>Done</Th>
                   <Th>Health</Th>
                   <Th>Release</Th>
-                  <Th />
+                  {edit && <Th />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {sprints.map((s) => (
                   <tr key={s.id}>
-                    <Td>
-                      <input type="checkbox" name="id" value={s.id} form="bulk-sprints" disabled={s.state !== "PLANNED"} aria-label={`Select ${s.name}`} title={s.state === "PLANNED" ? undefined : "Only planned sprints can be deleted"} />
-                    </Td>
+                    {edit && (
+                      <Td>
+                        <input type="checkbox" name="id" value={s.id} form="bulk-sprints" disabled={s.state !== "PLANNED"} aria-label={`Select ${s.name}`} title={s.state === "PLANNED" ? undefined : "Only planned sprints can be deleted"} />
+                      </Td>
+                    )}
                     <Td><Link href={`/sprints/${s.id}`} className="font-medium text-orange-700 hover:underline">{s.name}</Link></Td>
                     <Td>
                       <span className="font-mono text-xs text-slate-500">{s.lobKey}</span> {s.lobName}
@@ -106,16 +110,17 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
                     <Td>{fmtH(s.summary.doneHours)}</Td>
                     <Td>{s.state === "PLANNED" ? <span className="text-slate-400">—</span> : <HealthBadge health={s.summary.health} />}</Td>
                     <Td className="text-xs">{s.releaseId ? <Link href={`/releases/${s.releaseId}`} className="hover:underline">{releaseName.get(s.releaseId)}</Link> : "—"}</Td>
-                    <Td className="text-right text-xs"><Link href={`/sprints/${s.id}#edit`} className="text-orange-700 hover:underline">Edit</Link></Td>
+                    {edit && <Td className="text-right text-xs"><Link href={`/sprints/${s.id}#edit`} className="text-orange-700 hover:underline">Edit</Link></Td>}
                   </tr>
                 ))}
               </tbody>
             </Table>
             </>
           )}
-          <p className="mt-3 text-xs text-slate-500">Only planned sprints can be ticked for deletion; active, paused and closed sprints keep their history.</p>
+          {edit && <p className="mt-3 text-xs text-slate-500">Only planned sprints can be ticked for deletion; active, paused and closed sprints keep their history.</p>}
         </Card>
 
+        <EditOnly>
         <Card title="New sprint">
           {lobOptions.length === 0 ? (
             <Empty>Create a line of business first.</Empty>
@@ -123,6 +128,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
             <NewSprintForm lobs={lobOptions} defaultLobId={f.lob} today={toISODate(a.today)} />
           )}
         </Card>
+        </EditOnly>
       </div>
     </>
   );

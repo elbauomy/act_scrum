@@ -13,6 +13,7 @@ import { SprintButton } from "@/components/item-actions";
 import { HealthBadge, HealthParts, LoadBar, SprintStateBadge, fmtH, healthText } from "@/components/sprint-ui";
 import { StatusBadge, TypeBadge } from "@/components/work-items/badges";
 import { Badge, Card, Empty, Field, Input, LinkButton, PageHeader, Select, Stat, Table, Td, Textarea, Th } from "@/components/ui";
+import { EditOnly, canEdit } from "@/components/edit-only";
 
 export default async function SprintPage({ params, searchParams }: PageProps<"/sprints/[id]">) {
   const { id } = await params;
@@ -21,7 +22,8 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
   const s = a.sprints.find((x) => x.id === id);
   if (!s) notFound();
   const sum = s.summary;
-  const editable = s.state !== "CLOSED";
+  const edit = await canEdit();
+  const editable = s.state !== "CLOSED" && edit;
 
   const lob = await db.lineOfBusiness.findUniqueOrThrow({ where: { id: s.lobId } });
   const [inSprint, candidates] = await Promise.all([
@@ -81,7 +83,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
             <SprintStateBadge state={s.state} />
             {s.state !== "PLANNED" && <HealthBadge health={sum.health} />}
             <LinkButton href="/sprints">← Sprints</LinkButton>
-            <LinkButton href="#edit">Edit sprint</LinkButton>
+            {edit && <LinkButton href="#edit">Edit sprint</LinkButton>}
             <LinkButton href={`/board?sprint=${s.id}`}>Open board</LinkButton>
           </div>
         }
@@ -142,6 +144,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
           </Card>
 
           {editable && (
+            <EditOnly>
             <Card
               title={`Add from backlog (${candidates.length})`}
               actions={
@@ -184,6 +187,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
                 </Table>
               )}
             </Card>
+            </EditOnly>
           )}
         </div>
 
@@ -195,6 +199,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
             </Card>
           )}
 
+          <EditOnly>
           <Card title="Sprint status">
             {s.state === "PLANNED" && (
               <ActionForm action={startSprint} resetOnSuccess={false}>
@@ -258,7 +263,16 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
               </div>
             )}
           </Card>
+          </EditOnly>
+          {s.state === "CLOSED" && !edit && (
+            <Card title="Sprint status">
+              <p className="text-sm text-slate-600">
+                Closed {s.closedAt ? formatDate(s.closedAt) : ""}. Carried over: {sum.carriedOverItems} of {sum.committedItems} committed item(s).
+              </p>
+            </Card>
+          )}
 
+          <EditOnly>
           <div id="edit" className="scroll-mt-4">
             <Card title="Edit sprint">
               <ActionForm action={updateSprint} className="space-y-3" successMessage="Saved." resetOnSuccess={false}>
@@ -284,6 +298,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
               </ActionForm>
             </Card>
           </div>
+          </EditOnly>
 
           {s.pauses.length > 0 && (
             <Card title={`Pauses (${s.pauses.length})`}>
