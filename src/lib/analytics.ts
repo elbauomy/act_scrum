@@ -25,6 +25,8 @@ import { itemKey } from "./work-items";
 /** Everything we know about one sprint. Saved as JSON when the sprint is closed. */
 export type SprintSummary = SprintMetrics & {
   capacityByMember: Record<string, number>;
+  /** How each member's capacity was worked out when it comes from the sprint planning sheet */
+  plans?: Record<string, { availabilityPct: number; initial: number; meetings: number; vacation: number; excuses: number; other: number }>;
   totalCapacity: number;
   overAllocated: boolean;
   committedItems: number;
@@ -139,7 +141,7 @@ type ItemRow = {
 
 export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<Analytics> {
   const today = todayUTC();
-  const [settings, holidays, squads, lobs, members, sprintRows, items, baselines, releaseRows, sprintHistory] = await Promise.all([
+  const [settings, holidays, squads, lobs, members, sprintRows, items, baselines, releaseRows, sprintHistory, memberPlans] = await Promise.all([
     getSettings(),
     db.holiday.findMany(),
     db.squad.findMany({ orderBy: { name: "asc" } }),
@@ -159,6 +161,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       select: { workItemId: true, newValue: true, changedAt: true },
       orderBy: { changedAt: "asc" },
     }),
+    db.sprintMemberPlan.findMany(),
   ]);
 
   const cal: WorkCalendar = { workingDays: settings.workingDays, holidays: new Set(holidays.map((h) => toISODate(h.date))) };
@@ -198,6 +201,42 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     return poolsFor(ms.weeklyHours, allocations, lobId);
   };
 
+  // ---- capacity of each member in each sprint ----
+  // Calculated from squad hours, leave, holidays and overlapping sprints. When the sprint planning sheet gave a member's
+  // available hours ("Final Buffer"), those hours are used instead.
+  const planOf = new Map(memberPlans.map((p) => [`${p.sprintId}|${p.memberId}`, p]));
+  const calculated = new Map<string, { byMember: Record<string, number>; overAllocated: boolean }>();
+  for (const s of sprintRows) {
+    const lob = lobById.get(s.lobId)!;
+    const squadSpans = spansBySquad.get(lob.squadId) ?? [];
+    const span = squadSpans.find((x) => x.id === s.id)!;
+    const byMember: Record<string, number> = {};
+    let overAllocated = false;
+    for (const m of members) {
+      const ms = m.memberships.find((x) => x.squadId === lob.squadId);
+      if (!ms || !m.active) continue;
+      const c = sprintMemberCapacity({
+        sprint: span,
+        squadSprints: squadSpans,
+        lobSprints: spansByLob.get(lob.id) ?? [],
+        memberId: m.id,
+        weeklyHours: ms.weeklyHours,
+        pools: poolsOf(m.id, lob.squadId, lob.id),
+        cal,
+        leaves: m.leaves,
+      });
+      byMember[m.id] = c.hours;
+      overAllocated ||= c.overAllocated;
+    }
+    calculated.set(s.id, { byMember, overAllocated });
+  }
+  /** Share of a member's available time that goes to tasks in this sprint (meetings, vacation and so on take the rest). */
+  const efficiencyOf = (sprintId: string, memberId: string): number => {
+    const plan = planOf.get(`${sprintId}|${memberId}`);
+    const base = calculated.get(sprintId)?.byMember[memberId] ?? 0;
+    return plan && base > 0 ? Math.min(1, Math.max(0.05, plan.capacityHours / base)) : 1;
+  };
+
   // ---- timeline schedule for open tasks in planned and active sprints ----
   const sprintById = new Map(sprintRows.map((s) => [s.id, s]));
   const openTasks = items.filter((i) => {
@@ -227,6 +266,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       lobId: t.lobId,
       hours: t.estimateHours!,
       earliest: sprintById.get(t.sprintId!)!.startDate,
+      efficiency: efficiencyOf(t.sprintId!, t.assigneeId!),
     })),
     (memberId, squadId, lobId, day) => {
       const pools = poolsOf(memberId, squadId, lobId);
@@ -348,26 +388,14 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       }),
     });
 
-    // Capacity of each active squad member for this sprint
-    const squadSpans = spansBySquad.get(squad.id) ?? [];
-    const span = squadSpans.find((x) => x.id === s.id)!;
-    const capacityByMember: Record<string, number> = {};
-    let overAllocated = false;
-    for (const m of members) {
-      const ms = m.memberships.find((x) => x.squadId === squad.id);
-      if (!ms || !m.active) continue;
-      const c = sprintMemberCapacity({
-        sprint: span,
-        squadSprints: squadSpans,
-        lobSprints: spansByLob.get(lob.id) ?? [],
-        memberId: m.id,
-        weeklyHours: ms.weeklyHours,
-        pools: poolsOf(m.id, squad.id, lob.id),
-        cal,
-        leaves: m.leaves,
-      });
-      capacityByMember[m.id] = c.hours;
-      overAllocated ||= c.overAllocated;
+    // Capacity of each squad member for this sprint (the planning sheet's numbers win over the calculation)
+    const calc = calculated.get(s.id)!;
+    const capacityByMember: Record<string, number> = { ...calc.byMember };
+    const overAllocated = calc.overAllocated;
+    const planDetails: NonNullable<SprintSummary["plans"]> = {};
+    for (const p of memberPlans.filter((x) => x.sprintId === s.id)) {
+      capacityByMember[p.memberId] = p.capacityHours;
+      planDetails[p.memberId] = { availabilityPct: p.availabilityPct, initial: p.initialHours, meetings: p.meetingsHours, vacation: p.vacationHours, excuses: p.excuseHours, other: p.otherHours };
     }
     const totalCapacity = Object.values(capacityByMember).reduce((a, b) => a + b, 0);
     const memberIds = new Set([...Object.keys(capacityByMember), ...Object.keys(metrics.byMember)]);
@@ -393,7 +421,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     });
     return {
       ...view,
-      summary: { ...metrics, capacityByMember, totalCapacity: Math.round(totalCapacity * 100) / 100, overAllocated, committedItems, carriedOverItems, overloadedMembers, slippedTasks, health },
+      summary: { ...metrics, capacityByMember, plans: planDetails, totalCapacity: Math.round(totalCapacity * 100) / 100, overAllocated, committedItems, carriedOverItems, overloadedMembers, slippedTasks, health },
     };
   });
 

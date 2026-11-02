@@ -9,7 +9,14 @@ A simple rhythm for running your squads. Every list has filters at the top; the 
 ### Supervisors who share their time
 Open the member and add them to every squad they work in, with hours per week for each. Under **Split across lines of business** you can reserve hours for individual lines (for example 24 h for RB and 10 h for CB inside a 40 h squad). The hours you don't reserve (6 h here) are shared by all of the squad's lines through the sprints that overlap. Sprint capacity, the board, the timeline and the reports all use this split.
 
-## Before a sprint
+## Planning a sprint from your planning sheet
+1. Hold sprint planning with your sheet as usual.
+2. **Sprints → Import sprint planning**, choose the file (`.xlsx` or `.csv`) and click **Check the sheet**. You see the sprint, every member's capacity, and each story with its tasks, before anything is saved. Read the yellow notes.
+3. Click **Import into the system**. The sprint, each member's capacity (the sheet's *Final Buffer*), the user stories and their tasks are created.
+4. Open the **Timeline**: the planned dates of every task are filled in from the hours and each person's availability.
+5. If planning changes, edit the sheet and import it again: the same sprint is updated, changed hours are applied, and nothing is deleted.
+
+## Before a sprint (without a sheet)
 1. **Backlog** — create epics, features, stories/bugs and tasks. Give every task an assignee and hours.
 2. **Sprints → New sprint** — pick the line of business. The end date follows the sprint length (line of business, then squad, then default).
 3. Open the sprint and **Add to sprint** the stories and bugs. Their tasks come with them. Watch **Capacity and load**: aim for 70–100% per member.
@@ -17,7 +24,7 @@ Open the member and add them to every squad they work in, with hours per week fo
 5. **Start sprint** — this saves the committed hours. Later changes show up as scope change.
 
 ## Every day
-- **Daily Standup** — choose the squad and date. Suggestions are pre-filled from task activity; edit and Save.
+- **Daily Standup** — choose the squad and the date (today is selected for you), then type each person's status and Save. *Add task activity to the status* inserts what they finished and have in progress, if you want it.
 - **Sprint Board** — drag tasks between New / In Progress / Done. Switch to *Columns: member* and drag a task to reassign it.
 - **Timeline** — shows who is busy when, and which tasks would finish after their deadline. For each slip choose: reassign, change the hours, move the story to the next sprint, or **Accept new date** (it becomes the baseline).
 

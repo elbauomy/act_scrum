@@ -4,7 +4,7 @@ import { formatDate, toISODate } from "@/lib/dates";
 import { applyCls, dateParam, selectCls } from "@/lib/filters";
 import { NewSprintForm } from "@/components/new-sprint-form";
 import { HealthBadge, SprintStateBadge, fmtH } from "@/components/sprint-ui";
-import { Card, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Card, Empty, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
 
 type Q = { squad?: string; lob?: string; state?: string; release?: string; from?: string; to?: string; q?: string };
 
@@ -31,7 +31,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
 
   return (
     <>
-      <PageHeader title="Sprints" description="Each line of business runs its own sprints. Sprints may overlap." />
+      <PageHeader title="Sprints" description="Each line of business runs its own sprints. Sprints may overlap." actions={<LinkButton href="/sprints/import" variant="primary">Import sprint planning</LinkButton>} />
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-2">

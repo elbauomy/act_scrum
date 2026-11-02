@@ -25,7 +25,7 @@ export default async function BacklogPage({ searchParams }: PageProps<"/backlog"
 
   return (
     <>
-      <PageHeader title="Backlog" description="Epics → Features → User Stories / Bugs → Tasks for every line of business." />
+      <PageHeader title="Backlog" description="Epics → Features → User Stories / Bugs → Tasks for every line of business." actions={<LinkButton href="/sprints/import">Import from sprint planning sheet</LinkButton>} />
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-2">

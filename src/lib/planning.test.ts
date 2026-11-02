@@ -116,6 +116,16 @@ describe("scheduleTasks", () => {
     expect(plans.get("a1")!.byDay).toEqual({ "2026-11-02": 8 });
     expect(plans.get("b1")!.byDay).toEqual({ "2026-11-03": 4, "2026-11-04": 4 });
   });
+  it("spends only part of each available hour on tasks when efficiency is below 1", () => {
+    // 70% of an 8 h day goes into the task (the rest is meetings, vacation and so on)
+    const plans = scheduleTasks([{ id: "t", memberId: "m", squadId: "s", lobId: "l", hours: 14, earliest: d("2026-11-02"), efficiency: 0.7 }], avail, d("2026-11-02"));
+    const t = plans.get("t")!;
+    expect(Object.keys(t.byDay)).toHaveLength(3);
+    expect(t.byDay["2026-11-02"]).toBeCloseTo(5.6);
+    expect(t.byDay["2026-11-04"]).toBeCloseTo(2.8);
+    expect(Object.values(t.byDay).reduce((a, b) => a + b, 0)).toBeCloseTo(14);
+    expect(toISODate(t.end!)).toBe("2026-11-04");
+  });
   it("keeps different members independent", () => {
     const plans = scheduleTasks(
       [

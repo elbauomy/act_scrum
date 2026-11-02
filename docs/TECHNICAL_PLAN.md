@@ -58,6 +58,7 @@ src/
       standup/           daily standup + history (phase 5)
       reports/           8 reports with filters, charts, export (phase 6)
       data/              backup download + Excel import (phase 6/7)
+      sprints/import/    import of the sprint planning sheet
     api/export/[name]/   Excel downloads: report, backlog, timeline, standup, backup, template
   components/ui/         buttons, inputs, tables, cards, form helpers
   lib/
@@ -69,7 +70,8 @@ src/
     planning.ts          shared sprint capacity, scheduler, sprint metrics, health, forecast (pure, unit-tested)
     analytics.ts         loads everything once and builds sprint summaries, schedule and release forecasts
     reports.ts           the 8 reports as tables (used by the page, the charts and the Excel export)
-    import.ts            import template + row validation (pure, unit-tested)
+    import.ts            generic work-item import: template + row validation (pure, unit-tested)
+    sprint-sheet.ts      sprint planning sheet: reads the grid, plans the import (pure, unit-tested)
     excel.ts, backup.ts  .xlsx writer/reader, full backup
     actions/             Server Actions grouped by area
 ```
@@ -158,6 +160,28 @@ day over the LOB's last 3 closed sprints).
 
 **Standup.** Suggestions: tasks the member finished since the previous working day (yesterday), tasks In
 Progress (today) and blocked tasks (blockers). Saved notes are kept per day.
+
+### Sprint planning import
+
+The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Release 6 - Sprint 62"). Uploading it
+(`/sprints/import`, `.xlsx` or `.csv`) fills the system; daily follow-up then happens in the app.
+
+| Table | Key fields |
+|---|---|
+| `SprintMemberPlan` | per sprint and member: `availabilityPct`, `initialHours`, `meetingsHours`, `vacationHours`, `excuseHours`, `otherHours`, `capacityHours` (the sheet's *Final Buffer*) |
+
+**What is read** (`sprint-sheet.ts`, layout-driven, not fixed cells):
+- Title row: `Line of business - Release - Sprint`, the *From* / *To* dates (month-first like `11/1/2026`, day-first when the first number is above 12, ISO and real Excel dates) and `N Days`.
+- The row with *Team Member* gives the columns. A header cell `Dev (1)⏎Anna` is role `Dev (1)` and name `Anna`; a cell with only a name has no role. Columns to the right of the members (for example *Branch*) become lines in the description of a new story.
+- Capacity rows between the header and the first story: availability %, *Initial buffer hours*, every `(-)` meeting row, vacations (days, converted to hours with the sheet's hours per day), excuses (hours) and the done-definition / special-task rows. Capacity = initial − meetings − vacation − excuses − other; if the sheet's own *Final Buffer* holds a number it is used, and a difference is reported.
+- Stories: a row whose first column is a whole number; the title is in the next column. The following rows are task types (UI Task, Back End Task, Test Execution, Code review…). A number in a member's column is one task for that member with those hours. Stories without hours are left out.
+- In a workbook the tab that contains the *Team Member* table is used, so Settings / Timeline tabs are ignored.
+
+**What is done:** the line of business is detected from the title (or chosen in the form); the release is matched by name (a warning if missing); the sprint is created, or the existing one of the same name is updated (a closed sprint is refused). Missing members are created with their role and added to the squad with weekly hours = initial hours ÷ sheet days × working days per week; existing members not in the squad are added. Stories and tasks are matched by title (task: story + task type + member), so uploading again updates hours and creates only what is new; nothing is deleted and Done work is left alone. Existing backlog stories are moved into the sprint with their open tasks. Everything is written with bulk inserts in one transaction.
+
+**Capacity and timeline.** When a `SprintMemberPlan` exists its `capacityHours` replaces the calculated capacity for that member in that sprint, so Load and Remaining match the sheet. The scheduler multiplies each task's available hours by `capacityHours ÷ calculated capacity` (efficiency), so meetings and vacation slow the timeline down. Dates, slips and overloads then fill in automatically from the hours.
+
+**Standup.** `StandupEntry.status` holds the status typed by hand (plus optional blockers). Entries saved in the earlier yesterday / today format are shown as one status and converted the first time they are edited. The date defaults to the date on the user's own clock.
 
 ## 5. Capacity and scheduling algorithm
 

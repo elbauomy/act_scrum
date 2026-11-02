@@ -19,6 +19,7 @@ All phases are built. See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to us
 | 5. Daily standup with history | ✅ |
 | 6. Reports, health dashboard, Excel and PDF export, full backup | ✅ |
 | 7. Excel import (the app's template) | ✅ |
+| 8. Sprint planning sheet import (sprint, capacity, user stories, tasks) and manual daily standup status | ✅ |
 
 ## Deploying for free (Neon + Vercel)
 

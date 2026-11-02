@@ -104,6 +104,8 @@ export type ScheduleTask = {
   hours: number;
   /** Earliest day work may start (e.g. the sprint start) */
   earliest: Date;
+  /** Share (0-1) of an available hour that goes into this task; meetings, vacation and so on take the rest. Default 1. */
+  efficiency?: number;
 };
 
 export type TaskPlan = {
@@ -138,13 +140,15 @@ export function scheduleTasks(
       const sharedKey = `${t.memberId}|${t.squadId}|S|${iso}`;
       let pools: { lob: number; shared: number } | null = null;
       const pool = () => (pools ??= availability(t.memberId, t.squadId, t.lobId, day));
+      const efficiency = t.efficiency && t.efficiency > 0 ? Math.min(1, t.efficiency) : 1;
+      const needRaw = need / efficiency;
       const freeLob = left.get(lobKey) ?? pool().lob;
-      const fromLob = Math.min(freeLob, need);
+      const fromLob = Math.min(freeLob, needRaw);
       left.set(lobKey, freeLob - fromLob);
       const freeShared = left.get(sharedKey) ?? pool().shared;
-      const fromShared = Math.min(freeShared, need - fromLob);
+      const fromShared = Math.min(freeShared, needRaw - fromLob);
       left.set(sharedKey, freeShared - fromShared);
-      const take = fromLob + fromShared;
+      const take = (fromLob + fromShared) * efficiency;
       if (take > 1e-9) {
         plan.byDay[iso] = (plan.byDay[iso] ?? 0) + take;
         plan.start ??= day;
