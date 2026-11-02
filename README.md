@@ -8,15 +8,17 @@ releases, the timeline and Scrum reports, following ACT's own process.
 
 ## Status
 
+All phases are built. See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for how to use the app.
+
 | Phase | Status |
 |---|---|
-| 1. Foundation: login, settings, holidays, squads, LOBs, members, squad hours, leave | ✅ Done |
-| 2. Work items: hierarchy, IDs, statuses, hours, assignment, priority/rank, blocked, history, backlog filters | ✅ Done |
-| 3. Sprints & releases | Planned |
-| 4. Timeline | Planned |
-| 5. Daily standup | Planned |
-| 6. Reports & health dashboard | Planned |
-| 7. Excel import | Planned (waiting for sample sheet) |
+| 1. Foundation: login, settings, holidays, squads, LOBs, members, squad hours, leave | ✅ |
+| 2. Work items: hierarchy, IDs, statuses, hours, assignment, priority/rank, blocked, history, backlog filters | ✅ |
+| 3. Sprints & releases: planning, shared capacity, board, commitment snapshot, carry-over, release log and forecast | ✅ |
+| 4. Timeline: scheduling from availability, slip/overload warnings, baselines | ✅ |
+| 5. Daily standup with history | ✅ |
+| 6. Reports, health dashboard, Excel and PDF export, full backup | ✅ |
+| 7. Excel import (the app's template) | ✅ |
 
 ## Deploying for free (Neon + Vercel)
 

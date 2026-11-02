@@ -22,6 +22,7 @@ import { Card, Empty, Field, Input, LinkButton, Select, Stat, Textarea } from "@
 import { PriorityLabel, ProgressBar, TypeBadge, formatHours } from "@/components/work-items/badges";
 import { StatusSelect } from "@/components/work-items/status-select";
 import { NewItemForm } from "@/components/work-items/new-item-form";
+import { SprintSelect } from "@/components/item-actions";
 
 type TreeItem = { id: string; type: RollupNode["type"]; status: WorkItemStatus; estimateHours: number | null; parentId: string | null };
 
@@ -38,7 +39,7 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
   });
   if (!item) notFound();
 
-  const [lobItems, squadMembers, allMembers] = await Promise.all([
+  const [lobItems, squadMembers, allMembers, sprintChoices] = await Promise.all([
     db.workItem.findMany({
       where: { lobId: item.lobId },
       select: { id: true, number: true, title: true, type: true, status: true, estimateHours: true, parentId: true },
@@ -49,6 +50,7 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
       orderBy: { member: { name: "asc" } },
     }),
     db.member.findMany({ select: { id: true, name: true } }),
+    db.sprint.findMany({ where: { lobId: item.lobId, OR: [{ state: { not: "CLOSED" } }, { id: item.sprintId ?? "" }] }, orderBy: { startDate: "asc" }, select: { id: true, name: true, state: true } }),
   ]);
 
   const key = itemKey(item.lob.key, item.number);
@@ -242,6 +244,13 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
               {statuses.length > 0 && (
                 <div className="flex items-center justify-between"><dt className="text-slate-500">Status</dt><dd><StatusSelect key={item.status} id={item.id} status={item.status} options={statuses} /></dd></div>
               )}
+              {(item.type === "STORY" || item.type === "BUG") && (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-slate-500">Sprint</dt>
+                  <dd><SprintSelect itemId={item.id} value={item.sprintId ?? ""} options={sprintChoices.map((x) => ({ id: x.id, name: `${x.name}${x.state === "CLOSED" ? " (closed)" : ""}` }))} /></dd>
+                </div>
+              )}
+              {isTask && item.sprintId && <div className="flex justify-between"><dt className="text-slate-500">Sprint</dt><dd><Link href={`/sprints/${item.sprintId}`} className="text-orange-700 hover:underline">{sprintChoices.find((x) => x.id === item.sprintId)?.name ?? "Sprint"}</Link></dd></div>}
               {!isTask && <div className="flex justify-between"><dt className="text-slate-500">Progress</dt><dd><ProgressBar value={progress} /></dd></div>}
               <div className="flex justify-between"><dt className="text-slate-500">Created</dt><dd>{item.createdAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</dd></div>
               {item.doneAt && <div className="flex justify-between"><dt className="text-slate-500">Done</dt><dd>{item.doneAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</dd></div>}

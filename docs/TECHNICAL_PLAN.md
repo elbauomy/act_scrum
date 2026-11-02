@@ -22,9 +22,9 @@ This is the technical reference for the whole project. The agreed product scope 
 | ORM / migrations | Prisma 6 | `prisma/schema.prisma`; migrations in `prisma/migrations` |
 | Validation | Zod 4 | Every Server Action validates its input |
 | Auth | Single password + signed session cookie (`jose`, HS256) | No user table |
-| Charts (phase 6) | Recharts | |
-| Excel (phase 6/7) | SheetJS (`xlsx`) | Export now, import in phase 7 |
-| PDF export (phase 6) | Print-optimised report pages (browser "Save as PDF") | No server-side PDF engine |
+| Charts | Recharts 3 | Burndown, velocity, load, quality charts |
+| Excel | ExcelJS | Report/list exports, full backup, import template and import (read + write .xlsx) |
+| PDF export | Print-optimised report pages (browser "Save as PDF") | No server-side PDF engine; menu and filters are hidden when printing |
 | Tests | Vitest | For the scheduling and metrics logic |
 
 **Next.js configuration choices**
@@ -51,12 +51,26 @@ src/
       squads/            squads list + [id] edit page
       lobs/              lines of business
       members/           members, squad hours, leave
+      backlog/, items/   backlog tree, item page (phase 2)
+      sprints/, board/   sprint planning, start/close, sprint board (phase 3)
+      releases/          releases, forecast, date-change log (phase 3)
+      timeline/          scheduled hours per member, slips, baselines (phase 4)
+      standup/           daily standup + history (phase 5)
+      reports/           8 reports with filters, charts, export (phase 6)
+      data/              backup download + Excel import (phase 6/7)
+    api/export/[name]/   Excel downloads: report, backlog, timeline, standup, backup, template
   components/ui/         buttons, inputs, tables, cards, form helpers
   lib/
     db.ts                Prisma client singleton
     auth.ts              session sign/verify, requireAuth()
     dates.ts             date-only helpers (UTC, "YYYY-MM-DD")
     capacity.ts          working-day + capacity calculations (pure, unit-tested)
+    work-items.ts        hierarchy, statuses, roll-ups (pure, unit-tested)
+    planning.ts          shared sprint capacity, scheduler, sprint metrics, health, forecast (pure, unit-tested)
+    analytics.ts         loads everything once and builds sprint summaries, schedule and release forecasts
+    reports.ts           the 8 reports as tables (used by the page, the charts and the Excel export)
+    import.ts            import template + row validation (pure, unit-tested)
+    excel.ts, backup.ts  .xlsx writer/reader, full backup
     actions/             Server Actions grouped by area
 ```
 
@@ -106,31 +120,44 @@ History rows are written for: created, title, status, priority, assignee, estima
 Statuses: Story/Bug = NEW → APPROVED → COMMITTED → DONE; Task = NEW → IN_PROGRESS → DONE.
 Story/bug hours = sum of their tasks. Epic/feature progress is calculated from their children.
 
-### Phase 3 — sprints and releases
+### Phase 3–5 — sprints, releases, timeline, standup (built)
 
 | Table | Key fields |
 |---|---|
-| `Sprint` | `lobId`, `name`, `goal`, `startDate`, `endDate`, `state` (PLANNED, ACTIVE, CLOSED), `releaseId?`. Stories/bugs get `sprintId?` and their tasks follow them. |
-| `SprintMemberCapacity` | `sprintId`, `memberId`, `hours` (auto-filled, editable) |
-| `SprintCommitment` | Snapshot taken at sprint start: `sprintId`, `workItemId`, `estimateHours` |
-| `Release` | `lobId`, `name`, `version`, `targetDate`, `deployedDate?`, `state` |
+| `Sprint` | `lobId`, `name`, `goal`, `startDate`, `endDate`, `state` (PLANNED, ACTIVE, CLOSED), `releaseId?`, `startedAt`, `closedAt`, `result` (JSON summary saved at close) |
+| `WorkItem.sprintId` | Stories/bugs are planned into a sprint; their open tasks follow them. Done tasks stay in the sprint where they were finished. |
+| `SprintMemberShare` | Optional override: percent of a member's hours this sprint gets while sprints overlap |
+| `SprintCommitment` | Snapshot at sprint start: one row per task (its hours) and per story/bug (0 h, used for carry-over). `carriedOver` is set at close. |
+| `Release` | `lobId`, `name`, `version`, `notes`, `targetDate`, `deployedDate?` |
 | `ReleaseDateChange` | `releaseId`, `oldDate`, `newDate`, `reason`, `changedAt` |
+| `TaskBaseline` | Dates the Scrum Master accepted for a task; later slips are measured against them |
+| `StandupEntry` | `date`, `squadId`, `memberId`, `yesterday`, `today`, `blockers` (unique per date + squad + member) |
 
-Sprints of different LOBs may overlap. When a member's squad has overlapping sprints, their
-available hours in that period are split evenly between those sprints by default. You can edit the
-split, and you get a warning if the total goes over what the member has available.
+**Sprint lifecycle.** PLANNED (plan items, edit, delete) → ACTIVE (*Start* writes the commitment snapshot) →
+CLOSED (*Close* saves the final numbers into `Sprint.result`, marks unfinished committed stories/bugs as
+carried over, and moves them and their open tasks to the chosen sprint or back to the backlog). Closed
+sprints are read-only and are reported from the saved result, so later changes never rewrite history.
 
-### Phase 4 — timeline
+**Members shared across squads and lines of business.** A member can belong to several squads, with hours per
+week in each (`SquadMembership.weeklyHours`). Inside one squad the hours can optionally be reserved per line of
+business (`MemberLobAllocation`, total never above the squad hours). Hours that are not reserved stay in a
+shared pool for all of the squad's lines. Capacity of a sprint = the member's reserved hours for its line
+(shared only with that line's overlapping sprints) + its share of the shared pool (shared with all of the
+squad's overlapping sprints). The timeline schedules a task from its line's reserved hours first, then the
+shared pool. With no reservations everything behaves as before. Assignees must still belong to the squad
+that owns the line of business.
 
-| Table | Key fields |
-|---|---|
-| `TaskSchedule` | `taskId`, `plannedStart`, `plannedEnd`, `baselineStart?`, `baselineEnd?` |
+**Shared capacity.** A member's unreserved hours in a squad are split between all of that squad's sprints that cover
+a day. Default is an even split; an override (percent) on a sprint takes its share first and the rest is
+divided among the other sprints. Overrides adding up to more than 100% on a day raise a warning.
+Sprints of any LOB in the same squad compete for the same hours.
 
-### Phase 5 — daily standup
+**Releases.** One LOB, many of that LOB's sprints. Changing the target date writes a `ReleaseDateChange`
+row (old, new, reason). Forecast = today + remaining hours of the release's open sprints ÷ (hours done per
+day over the LOB's last 3 closed sprints).
 
-| Table | Key fields |
-|---|---|
-| `StandupEntry` | `date`, `squadId`, `memberId`, `yesterday`, `today`, `blockers` (unique per date+squad+member) |
+**Standup.** Suggestions: tasks the member finished since the previous working day (yesterday), tasks In
+Progress (today) and blocked tasks (blockers). Saved notes are kept per day.
 
 ## 5. Capacity and scheduling algorithm
 
@@ -143,16 +170,17 @@ dailyHours(member, squad, d) =
     membership.weeklyHours / count(settings.workingDays)   otherwise
 ```
 
-**Timeline (phase 4).** For each member, take their open tasks in active and planned sprints, ordered by
+**Timeline.** For each member, take their open tasks in active and planned sprints, ordered by
 sprint start → story rank → task rank. Fill each day's available hours from the earliest allowed
 date (today or sprint start, whichever is later). A task's planned end is the day its estimate runs
 out. Only availability matters; there are no task dependencies.
 
-- If a task ends after its sprint's end, it is marked **slipped**.
+- Queues are per member and squad, so a member's hours are shared by every task in that squad, across all overlapping sprints.
+- If a task ends after its deadline it is marked **slipped**. The deadline is the sprint end, or the baseline you accepted for that task.
 - If the hours a member has in a sprint are more than their sprint capacity, they are marked **overloaded**.
 - Nothing moves on its own. You choose: reassign, move to another sprint, re-estimate, or accept the new dates as the baseline.
 
-## 6. Metric definitions (phase 6)
+## 6. Metric definitions
 
 Hours "burn" only when a task becomes **Done**.
 
@@ -168,36 +196,43 @@ Hours "burn" only when a task becomes **Done**.
 | Cycle time | Story/Bug COMMITTED→DONE days; Task IN_PROGRESS→DONE days (from history) |
 | Productivity (member) | Done hours ÷ member capacity in the period |
 | Release forecast | remaining release hours ÷ average velocity → number of sprints → forecast date vs. target |
-| Burndown | for each day: Σ estimates of sprint tasks not Done at end of that day (rebuilt from history), with an ideal line from committed hours down to 0 |
+| Burndown | for each day: Σ estimates of sprint tasks not Done at the end of that day (tasks count from the day they entered the sprint, taken from history), with an ideal line from the committed hours down to 0 over the sprint's working days |
 
-**Sprint Health Score (0–100)**: 30% burndown on track + 25% commitment reliability so far + 15%
-scope stability + 15% load balance + 15% blocked/overdue items. Green ≥ 80, Amber 60–79, Red < 60.
+**Sprint Health Score (0–100)** (`sprintHealth` in `planning.ts`), green ≥ 80, amber 60–79, red < 60:
+
+| Part | Weight | Score (0–100%) |
+|---|---|---|
+| Burndown on track | 30% | 1 − (remaining − ideal remaining today) ÷ committed, never below 0 |
+| Commitment reliability | 25% | active sprint: done ÷ (committed × share of working days passed); closed sprint: done ÷ committed |
+| Scope stability | 15% | 100% up to 10% scope change, falling to 0% at 40% |
+| Load balance | 15% | 1 − (members assigned more than capacity ÷ members) |
+| Blocked / slipped | 15% | 1 − (open tasks that are blocked or slipping ÷ open tasks) |
 
 ## 7. Security
 
-- `APP_PASSWORD` (the login password) and `SESSION_SECRET` (signs the session cookie) live only in
-  Netlify environment variables, never in the code.
+- `APP_PASSWORD` (the login password) and `SESSION_SECRET` (signs the session cookie) live only in the
+  hosting provider's environment variables, never in the code.
 - Session cookie: `httpOnly`, `secure`, `sameSite=lax`, lasts 30 days.
-- `proxy.ts` sends anyone not signed in to `/login`. Every Server Action calls `requireAuth()`.
+- `proxy.ts` sends anyone not signed in to `/login`. Every Server Action and every export route calls `requireAuth()`.
 - All database access goes through Prisma (no hand-built SQL), and all input is validated with Zod.
+- Uploaded Excel files are limited to 2 MB and 1,000 rows, are only read (never executed), and nothing is imported if any row is invalid.
 
 ## 8. Environments and deployment
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `DATABASE_URL` | Netlify + local `.env` | Neon **pooled** connection string (used by the app) |
-| `DIRECT_URL` | Netlify + local `.env` | Neon **direct** connection string (used for migrations) |
-| `APP_PASSWORD` | Netlify + local `.env` | Login password |
-| `SESSION_SECRET` | Netlify + local `.env` | Random string of 32+ characters |
+| `DATABASE_URL` | Vercel + local `.env` | Neon **pooled** connection string (used by the app) |
+| `DIRECT_URL` | Vercel + local `.env` | Neon **direct** connection string (used for migrations) |
+| `APP_PASSWORD` | Vercel + local `.env` | Login password |
+| `SESSION_SECRET` | Vercel + local `.env` | Random string of 32+ characters |
 
-**Netlify build** (`netlify.toml`): `prisma migrate deploy` then `next build`. Database changes are
-applied automatically on each deploy. Netlify detects Next.js and adds its Next.js runtime itself.
-The Prisma engine is built for Netlify's Linux (`rhel-openssl-3.0.x`).
+**Vercel build** (`vercel.json`): `prisma migrate deploy` then `next build`. Database changes are applied
+automatically on each deploy; migrations only add tables and columns. The Prisma engine includes
+`rhel-openssl-3.0.x` for Vercel's Linux. `netlify.toml` is kept as an alternative host.
 
-**Branches**: work happens on a feature branch, and `main` is what Netlify publishes. Every pull request
-gets a Netlify preview link so you can test before merging.
+**Branches**: work happens on a feature branch, and `main` is what Vercel publishes.
 
-**Backups**: Neon free has short restore history, so phase 6 adds a "Download full backup" Excel export.
+**Backups**: Neon free has a short restore history, so *Import & Backup* downloads every table as one Excel file.
 
 ## 9. Local development
 
@@ -206,5 +241,5 @@ cp .env.example .env      # fill in values
 npm install
 npx prisma migrate dev    # create tables
 npm run dev               # http://localhost:3000
-npm test                  # unit tests
+npm test                  # unit tests (capacity, hierarchy, planning, import)
 ```

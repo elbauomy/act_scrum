@@ -52,11 +52,13 @@ export async function createWorkItem(_prev: ActionState, formData: FormData): Pr
     await db.$transaction(async (tx) => {
       let lobId = data.lobId;
       let parentType: WorkItemType | null = null;
+      let parentSprintId: string | null = null;
       if (data.parentId) {
-        const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true } });
+        const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true, sprintId: true } });
         if (!parent) throw new UserError("The chosen parent no longer exists.");
         parentType = parent.type;
         lobId = parent.lobId;
+        parentSprintId = parent.sprintId;
       }
       const parentError = validateParent(data.type, parentType);
       if (parentError) throw new UserError(parentError);
@@ -84,10 +86,14 @@ export async function createWorkItem(_prev: ActionState, formData: FormData): Pr
           parentId: data.parentId,
           assigneeId: isTask ? data.assigneeId : null,
           estimateHours: isTask ? data.estimateHours : null,
+          sprintId: isTask ? parentSprintId : null,
           rank: nextRank(siblings.map((s) => s.rank)),
         },
       });
       await tx.workItemHistory.create({ data: { workItemId: item.id, field: "created", newValue: data.type } });
+      if (isTask && parentSprintId) {
+        await tx.workItemHistory.create({ data: { workItemId: item.id, field: "sprint", newValue: parentSprintId } });
+      }
     });
   } catch (err) {
     return fail(err);
@@ -123,14 +129,17 @@ export async function updateWorkItem(_prev: ActionState, formData: FormData): Pr
 
       // Parent: may move within the same line of business only.
       let parentId = item.parentId;
+      let sprintId = item.sprintId;
       if (PARENT_TYPES[item.type].length > 0 && data.parentId !== item.parentId) {
         let parentType: WorkItemType | null = null;
         if (data.parentId) {
           if (data.parentId === item.id) throw new UserError("An item cannot be its own parent.");
-          const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true } });
+          const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true, sprintId: true } });
           if (!parent) throw new UserError("The chosen parent no longer exists.");
           if (parent.lobId !== item.lobId) throw new UserError("The parent must be in the same line of business.");
           parentType = parent.type;
+          // An open task follows its new story into that story's sprint.
+          if (item.type === "TASK" && item.status !== "DONE") sprintId = parent.sprintId;
         }
         const parentError = validateParent(item.type, parentType);
         if (parentError) throw new UserError(parentError);
@@ -157,6 +166,7 @@ export async function updateWorkItem(_prev: ActionState, formData: FormData): Pr
       track("estimate", item.estimateHours, estimateHours);
       track("blocked", item.blocked ? item.blockedReason || "yes" : null, data.blocked ? blockedReason || "yes" : null);
       track("parent", item.parentId, parentId);
+      track("sprint", item.sprintId, sprintId);
 
       let rank = item.rank;
       if (parentId !== item.parentId) {
@@ -173,6 +183,7 @@ export async function updateWorkItem(_prev: ActionState, formData: FormData): Pr
           priority: data.priority as "HIGH" | "MEDIUM" | "LOW",
           status,
           parentId,
+          sprintId,
           rank,
           assigneeId,
           estimateHours,

@@ -20,14 +20,15 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: "Delivery",
     items: [
       { href: "/backlog", label: "Backlog", also: ["/items"] },
-      { href: "#", label: "Sprints", soon: true },
-      { href: "#", label: "Releases", soon: true },
-      { href: "#", label: "Timeline", soon: true },
-      { href: "#", label: "Daily Standup", soon: true },
-      { href: "#", label: "Reports", soon: true },
+      { href: "/sprints", label: "Sprints" },
+      { href: "/board", label: "Sprint Board" },
+      { href: "/releases", label: "Releases" },
+      { href: "/timeline", label: "Timeline" },
+      { href: "/standup", label: "Daily Standup" },
+      { href: "/reports", label: "Reports" },
     ],
   },
-  { title: "System", items: [{ href: "/settings", label: "Settings" }] },
+  { title: "System", items: [{ href: "/settings", label: "Settings" }, { href: "/data", label: "Import & Backup" }] },
 ];
 
 export function Nav() {

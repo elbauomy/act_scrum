@@ -54,10 +54,10 @@ export function ActionForm({
   );
 }
 
-export function SubmitButton({ children, variant, className }: { children: ReactNode; variant?: "primary" | "secondary" | "danger"; className?: string }) {
+export function SubmitButton({ children, variant, className, disabled }: { children: ReactNode; variant?: "primary" | "secondary" | "danger"; className?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant={variant} disabled={pending} className={className}>
+    <Button type="submit" variant={variant} disabled={pending || disabled} className={className}>
       {pending ? "Saving…" : children}
     </Button>
   );

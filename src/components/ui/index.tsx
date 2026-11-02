@@ -136,3 +136,12 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
     </div>
   );
 }
+
+/** Link to a file download (an API route, so a plain anchor is the right element). */
+export function DownloadLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+  return (
+    <a href={href} download className={cn("inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50", className)}>
+      {children}
+    </a>
+  );
+}

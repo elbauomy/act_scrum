@@ -27,14 +27,14 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Hosting | 100% free: Vercel (Hobby) + Neon + GitHub. `*.netlify.app` is blocked on the owner's networks. |
 | Import | Excel import postponed until a sample sheet is shared |
 
-## Phases
+## Phases (all built)
 
-1. **Foundation**: login, settings, holidays, squads, LOBs, members (squad hours, leave), deployed to Netlify
+1. **Foundation**: login, settings, holidays, squads, LOBs, members (squad hours, leave)
 2. **Work items**: hierarchy, statuses, estimates, assignment, priority/rank, blocked, history, backlog + filters
-3. **Sprints & releases**: per-LOB sprints, capacity planning, board, commitment snapshot, carry-over, release date log
-4. **Timeline**: automatic scheduling, slip/overload warnings, Scrum Master actions
-5. **Daily standup**
-6. **Reports & health dashboard**: all metrics, filters, Excel/PDF export, full backup
-7. **Excel import**
+3. **Sprints & releases**: per-LOB sprints, shared capacity for overlapping sprints, planning, board, commitment snapshot, carry-over, release date log and forecast
+4. **Timeline**: automatic scheduling from availability, slip and overload warnings, Scrum Master actions (reassign, re-estimate, next sprint, accept baseline)
+5. **Daily standup** with suggestions, history and filters
+6. **Reports & dashboard**: sprint health, velocity, burndown, capacity/load, productivity, commitment/scope/carry-over/bugs, cycle time, release forecast; filters; Excel + PDF export; full backup
+7. **Excel import** of work items using the app's template (change the template once real sheets are shared)
 
-Metric formulas are in [TECHNICAL_PLAN.md](./TECHNICAL_PLAN.md#6-metric-definitions-phase-6).
+Metric formulas are in [TECHNICAL_PLAN.md](./TECHNICAL_PLAN.md#6-metric-definitions).

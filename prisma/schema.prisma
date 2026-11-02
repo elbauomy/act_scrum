@@ -34,51 +34,59 @@ model Squad {
   sprintLengthDays Int?
   lobs             LineOfBusiness[]
   memberships      SquadMembership[]
+  standups         StandupEntry[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
 
 /// A Line of Business (LOB) is the "project". Owned by exactly one squad.
 model LineOfBusiness {
-  id               String   @id @default(cuid())
-  name             String   @unique
-  description      String   @default("")
+  id               String                @id @default(cuid())
+  name             String                @unique
+  description      String                @default("")
   squadId          String
-  squad            Squad    @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  squad            Squad                 @relation(fields: [squadId], references: [id], onDelete: Restrict)
   /// Overrides the squad / system sprint length (days)
   sprintLengthDays Int?
   /// Short code used in item IDs, e.g. "RB" -> RB-12
-  key              String     @unique
+  key              String                @unique
   /// Next item number to hand out in this LOB
-  nextItemNumber   Int        @default(1)
+  nextItemNumber   Int                   @default(1)
   workItems        WorkItem[]
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  sprints          Sprint[]
+  releases         Release[]
+  allocations      MemberLobAllocation[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([squadId])
 }
 
 /// Squad member. A name only - members do not log in.
 model Member {
-  id          String            @id @default(cuid())
-  name        String
-  role        String            @default("")
-  active      Boolean           @default(true)
-  memberships SquadMembership[]
-  leaves      Leave[]
-  assignments WorkItem[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String              @id @default(cuid())
+  name         String
+  role         String              @default("")
+  active       Boolean             @default(true)
+  memberships  SquadMembership[]
+  leaves       Leave[]
+  assignments  WorkItem[]
+  sprintShares SprintMemberShare[]
+  standups     StandupEntry[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 
 /// Hours per week a member gives to a squad.
 model SquadMembership {
-  id          String @id @default(cuid())
-  memberId    String
-  squadId     String
-  weeklyHours Float
-  member      Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  squad       Squad  @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  id             String                @id @default(cuid())
+  memberId       String
+  squadId        String
+  weeklyHours    Float
+  member         Member                @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  squad          Squad                 @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  /// Optional split of the weekly hours across the squad's lines of business
+  lobAllocations MemberLobAllocation[]
 
   @@unique([memberId, squadId])
   @@index([squadId])
@@ -122,39 +130,45 @@ enum Priority {
 }
 
 model WorkItem {
-  id                 String          @id @default(cuid())
+  id                 String             @id @default(cuid())
   type               WorkItemType
   /// Sequential number inside the LOB (shown as KEY-number)
   number             Int
   title              String
-  description        String          @default("")
-  acceptanceCriteria String          @default("")
-  status             WorkItemStatus  @default(NEW)
-  priority           Priority        @default(MEDIUM)
+  description        String             @default("")
+  acceptanceCriteria String             @default("")
+  status             WorkItemStatus     @default(NEW)
+  priority           Priority           @default(MEDIUM)
   /// Manual order among siblings (lower comes first)
-  rank               Float           @default(0)
+  rank               Float              @default(0)
   lobId              String
-  lob                LineOfBusiness  @relation(fields: [lobId], references: [id], onDelete: Restrict)
+  lob                LineOfBusiness     @relation(fields: [lobId], references: [id], onDelete: Restrict)
   parentId           String?
-  parent             WorkItem?       @relation("WorkItemTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children           WorkItem[]      @relation("WorkItemTree")
+  parent             WorkItem?          @relation("WorkItemTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children           WorkItem[]         @relation("WorkItemTree")
   /// Tasks only
   assigneeId         String?
-  assignee           Member?         @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee           Member?            @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
   /// Tasks only
   estimateHours      Float?
-  blocked            Boolean         @default(false)
-  blockedReason      String          @default("")
+  blocked            Boolean            @default(false)
+  blockedReason      String             @default("")
   /// Set when status becomes DONE, cleared when it leaves DONE
   doneAt             DateTime?
+  /// Stories, bugs and their tasks. Tasks follow their story; done tasks stay in the sprint they were finished in.
+  sprintId           String?
+  sprint             Sprint?            @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   history            WorkItemHistory[]
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  commitments        SprintCommitment[]
+  baseline           TaskBaseline?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@unique([lobId, number])
   @@index([parentId])
   @@index([assigneeId])
   @@index([lobId, type])
+  @@index([sprintId])
 }
 
 /// One row per changed field, used for audit and for reports (cycle time, burndown).
@@ -170,4 +184,132 @@ model WorkItemHistory {
 
   @@index([workItemId, changedAt])
   @@index([field, changedAt])
+}
+
+enum SprintState {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+/// A sprint belongs to one line of business. Sprints may overlap.
+model Sprint {
+  id          String              @id @default(cuid())
+  lobId       String
+  lob         LineOfBusiness      @relation(fields: [lobId], references: [id], onDelete: Restrict)
+  name        String
+  goal        String              @default("")
+  startDate   DateTime            @db.Date
+  endDate     DateTime            @db.Date
+  state       SprintState         @default(PLANNED)
+  releaseId   String?
+  release     Release?            @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  startedAt   DateTime?
+  closedAt    DateTime?
+  /// Metrics saved when the sprint is closed (see SprintSummary in src/lib/analytics.ts)
+  result      Json?
+  items       WorkItem[]
+  commitments SprintCommitment[]
+  shares      SprintMemberShare[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([lobId, startDate])
+  @@index([releaseId])
+}
+
+/// Optional override: percent of a member's squad hours given to this sprint on days it overlaps other sprints.
+model SprintMemberShare {
+  id       String @id @default(cuid())
+  sprintId String
+  memberId String
+  percent  Float
+  sprint   Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, memberId])
+}
+
+/// Snapshot taken when a sprint starts. Rows for tasks hold their hours; rows for stories/bugs hold 0.
+model SprintCommitment {
+  id          String   @id @default(cuid())
+  sprintId    String
+  workItemId  String
+  hours       Float    @default(0)
+  /// Set when the sprint closes: story/bug was committed but not Done
+  carriedOver Boolean  @default(false)
+  sprint      Sprint   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  workItem    WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, workItemId])
+}
+
+/// A release (deployment) belongs to one line of business and contains several of its sprints.
+model Release {
+  id           String              @id @default(cuid())
+  lobId        String
+  lob          LineOfBusiness      @relation(fields: [lobId], references: [id], onDelete: Restrict)
+  name         String
+  version      String              @default("")
+  notes        String              @default("")
+  targetDate   DateTime            @db.Date
+  deployedDate DateTime?           @db.Date
+  sprints      Sprint[]
+  changes      ReleaseDateChange[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([lobId, targetDate])
+}
+
+model ReleaseDateChange {
+  id        String   @id @default(cuid())
+  releaseId String
+  release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  oldDate   DateTime @db.Date
+  newDate   DateTime @db.Date
+  reason    String   @default("")
+  changedAt DateTime @default(now())
+
+  @@index([releaseId, changedAt])
+}
+
+/// Dates the Scrum Master accepted for a task, so later slips are measured against them.
+model TaskBaseline {
+  id            String   @id @default(cuid())
+  workItemId    String   @unique
+  workItem      WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  baselineStart DateTime @db.Date
+  baselineEnd   DateTime @db.Date
+  acceptedAt    DateTime @default(now())
+}
+
+model StandupEntry {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  squadId   String
+  memberId  String
+  squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  yesterday String   @default("")
+  today     String   @default("")
+  blockers  String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, squadId, memberId])
+  @@index([squadId, date])
+}
+
+/// Hours per week a member reserves for one line of business inside a squad.
+/// Whatever is left of the squad hours stays shared by all of the squad's lines of business.
+model MemberLobAllocation {
+  id           String          @id @default(cuid())
+  membershipId String
+  lobId        String
+  weeklyHours  Float
+  membership   SquadMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  lob          LineOfBusiness  @relation(fields: [lobId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, lobId])
+  @@index([lobId])
 }
