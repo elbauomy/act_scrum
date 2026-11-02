@@ -196,7 +196,7 @@ The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Rele
 
 **Capacity and timeline.** When a `SprintMemberPlan` exists its `capacityHours` replaces the calculated capacity for that member in that sprint, so Load and Remaining match the sheet. The scheduler multiplies each task's available hours by `capacityHours ÷ calculated capacity` (efficiency), so meetings and vacation slow the timeline down. Dates, slips and overloads then fill in automatically from the hours.
 
-**Standup.** `StandupEntry.status` holds the status typed by hand (plus optional blockers). Entries saved in the earlier yesterday / today format are shown as one status and converted the first time they are edited. The date defaults to the date on the user's own clock.
+**Standup.** `StandupEntry.off` / `offReason` mark a day off. Saving it clears the status, adds a one-day `Leave` whose note starts with `Off - daily standup` (so it can be found and removed when unticked; a leave added on the member's page is shown but left alone), and sets the same flag on the member's notes in other squads for that day. `StandupEntry.status` holds the status typed by hand (plus optional blockers). Entries saved in the earlier yesterday / today format are shown as one status and converted the first time they are edited. The date defaults to the date on the user's own clock.
 
 ## 5. Capacity and scheduling algorithm
 

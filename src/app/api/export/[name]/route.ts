@@ -136,7 +136,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ name: strin
           title: "Standup",
           note: `Daily standup notes ${formatDate(from)} – ${formatDate(to)}`,
           columns: [{ key: "date", label: "Date" }, { key: "squad", label: "Squad" }, { key: "member", label: "Member" }, { key: "status", label: "Status" }, { key: "blockers", label: "Blockers" }],
-          rows: entries.map((e) => ({ date: toISODate(e.date), squad: e.squad.name, member: e.member.name, status: e.status || [e.yesterday && `Yesterday: ${e.yesterday}`, e.today && `Today: ${e.today}`].filter(Boolean).join("\n"), blockers: e.blockers })),
+          rows: entries.map((e) => ({ date: toISODate(e.date), squad: e.squad.name, member: e.member.name, status: e.off ? `OFF${e.offReason ? `: ${e.offReason}` : ""}` : e.status || [e.yesterday && `Yesterday: ${e.yesterday}`, e.today && `Today: ${e.today}`].filter(Boolean).join("\n"), blockers: e.blockers })),
         }]),
         "standup",
       );
