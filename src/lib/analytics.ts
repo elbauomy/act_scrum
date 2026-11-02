@@ -2,8 +2,8 @@ import "server-only";
 import type { SprintState, WorkItemStatus, WorkItemType } from "@prisma/client";
 import { db } from "./db";
 import { getSettings } from "./settings";
-import { toISODate, todayUTC } from "./dates";
-import { effectiveSprintLength, type LeaveRange, type WorkCalendar, dailyHours } from "./capacity";
+import { addDays, toISODate, todayUTC } from "./dates";
+import { effectiveSprintLength, type LeaveRange, type WorkCalendar, dailyHours, workingDaysBetween } from "./capacity";
 import {
   computeSprintMetrics,
   daysBetween,
@@ -11,6 +11,7 @@ import {
   forecastFinish,
   idealRemainingOn,
   isSlipped,
+  pausedDayKeys,
   scheduleTasks,
   sprintHealth,
   poolsFor,
@@ -55,6 +56,8 @@ export type SprintView = {
   summary: SprintSummary;
   /** Per-member share overrides (percent) */
   overrides: Record<string, number>;
+  /** Every period the sprint was on hold, oldest first */
+  pauses: { id: string; start: Date; resumedOn: Date | null; reason: string; extendedByDays: number; workingDays: number }[];
 };
 
 export type TaskView = {
@@ -82,6 +85,10 @@ export type TaskView = {
   baselineEnd: Date | null;
   slipped: boolean;
   issue: "unassigned" | "no-estimate" | "no-availability" | null;
+  /** The sprint is on hold, so the task has no planned dates */
+  sprintPaused: boolean;
+  /** Position in the schedule (sprint start, story order, task order) */
+  order: number;
 };
 
 export type ReleaseView = {
@@ -120,6 +127,8 @@ export type Analytics = {
   releases: ReleaseView[];
   /** closed sprints per LOB, oldest first */
   velocity: Record<string, VelocityPoint[]>;
+  /** Days off of each member */
+  leaves: Record<string, { start: Date; end: Date }[]>;
 };
 
 type ItemRow = {
@@ -141,7 +150,7 @@ type ItemRow = {
 
 export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<Analytics> {
   const today = todayUTC();
-  const [settings, holidays, squads, lobs, members, sprintRows, items, baselines, releaseRows, sprintHistory, memberPlans] = await Promise.all([
+  const [settings, holidays, squads, lobs, members, sprintRows, items, baselines, releaseRows, sprintHistory, memberPlans, pauseRows] = await Promise.all([
     getSettings(),
     db.holiday.findMany(),
     db.squad.findMany({ orderBy: { name: "asc" } }),
@@ -162,6 +171,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       orderBy: { changedAt: "asc" },
     }),
     db.sprintMemberPlan.findMany(),
+    db.sprintPause.findMany({ orderBy: { startDate: "asc" } }),
   ]);
 
   const cal: WorkCalendar = { workingDays: settings.workingDays, holidays: new Set(holidays.map((h) => toISODate(h.date))) };
@@ -176,12 +186,17 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
   const enteredAt = new Map<string, Date>();
   for (const h of sprintHistory) if (h.newValue) enteredAt.set(`${h.workItemId}|${h.newValue}`, h.changedAt);
 
+  const pausesBySprint = new Map<string, typeof pauseRows>();
+  for (const p of pauseRows) (pausesBySprint.get(p.sprintId) ?? pausesBySprint.set(p.sprintId, []).get(p.sprintId)!).push(p);
+  const pausesOf = (sprintId: string) => pausesBySprint.get(sprintId) ?? [];
+
   // Sprint spans per squad (used to share a member's hours between overlapping sprints)
   const spanOf = (s: (typeof sprintRows)[number]): SprintSpan => ({
     id: s.id,
     startDate: s.startDate,
     endDate: s.endDate,
     overrides: Object.fromEntries(s.shares.map((x) => [x.memberId, x.percent])),
+    pauses: pausesOf(s.id).map((p) => ({ start: p.startDate, end: p.resumedOn ? addDays(p.resumedOn, -1) : null })),
   });
   const spansBySquad = new Map<string, SprintSpan[]>();
   const spansByLob = new Map<string, SprintSpan[]>();
@@ -245,6 +260,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     return sp != null && (sp.state !== "CLOSED" || sp.id === opts.asClosed);
   });
   const schedulable = openTasks
+    .filter((t) => sprintById.get(t.sprintId!)?.state !== "PAUSED")
     .filter((t) => t.assigneeId && (t.estimateHours ?? 0) > 0 && memberById.get(t.assigneeId)?.active)
     .sort((a, b) => {
       const sa = sprintById.get(a.sprintId!)!;
@@ -258,6 +274,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
         a.number - b.number
       );
     });
+  const orderOf = new Map(schedulable.map((t, i) => [t.id, i]));
   const plans = scheduleTasks(
     schedulable.map((t) => ({
       id: t.id,
@@ -284,7 +301,8 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     const base = baselineByTask.get(t.id);
     const plan = plans.get(t.id) ?? null;
     const deadline = base?.baselineEnd ?? sp.endDate;
-    const issue: TaskView["issue"] = !t.assigneeId
+    const paused = sp.state === "PAUSED";
+    const issue: TaskView["issue"] = paused ? null : !t.assigneeId
       ? "unassigned"
       : (t.estimateHours ?? 0) <= 0
         ? "no-estimate"
@@ -316,6 +334,8 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       baselineEnd: base?.baselineEnd ?? null,
       slipped: plan ? isSlipped(plan.end, deadline) : false,
       issue,
+      sprintPaused: sp.state === "PAUSED",
+      order: orderOf.get(t.id) ?? Number.MAX_SAFE_INTEGER,
     };
   });
   const taskView = new Map(tasks.map((t) => [t.id, t]));
@@ -343,6 +363,18 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       startedAt: s.startedAt,
       closedAt: s.closedAt,
       overrides: Object.fromEntries(s.shares.map((x) => [x.memberId, x.percent])),
+      pauses: pausesOf(s.id).map((p) => {
+        // For a pause that is still open, count the days before today: resuming today would not lose today.
+        const lastPausedDay = addDays(p.resumedOn ?? today, -1);
+        return {
+          id: p.id,
+          start: p.startDate,
+          resumedOn: p.resumedOn,
+          reason: p.reason,
+          extendedByDays: p.extendedByDays,
+          workingDays: lastPausedDay.getTime() >= p.startDate.getTime() ? workingDaysBetween(p.startDate, lastPausedDay, cal) : 0,
+        };
+      }),
     };
     const stored = s.state === "CLOSED" && s.id !== opts.asClosed ? (s.result as SprintSummary | null) : null;
     if (stored) {
@@ -352,6 +384,9 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
 
     const closing = s.id === opts.asClosed;
     const started = s.state !== "PLANNED";
+    // Paused days do not count as working days of this sprint (burndown ideal line, time elapsed).
+    const paused = pausedDayKeys(pausesOf(s.id).map((p) => ({ start: p.startDate, end: p.resumedOn ? addDays(p.resumedOn, -1) : null })), s.startDate, s.endDate, today);
+    const sprintCal: WorkCalendar = paused.size ? { workingDays: cal.workingDays, holidays: new Set([...cal.holidays, ...paused]) } : cal;
     const sprintTasks = items.filter((i) => i.type === "TASK" && i.sprintId === s.id);
     const committed: Record<string, number> = {};
     let committedItems = 0;
@@ -371,7 +406,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       started,
       closed: closing,
       today,
-      cal,
+      cal: sprintCal,
       committed,
       tasks: sprintTasks.map((t) => {
         const parent = t.parentId ? itemById.get(t.parentId) : undefined;
@@ -411,7 +446,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       doneHours: metrics.doneHours,
       remainingHours: metrics.remainingHours,
       idealRemaining: idealRemainingOn(metrics.burndown, today, metrics.committedHours),
-      elapsed: started ? elapsedFraction(s.startDate, s.endDate, today, cal) : 0,
+      elapsed: started ? elapsedFraction(s.startDate, s.endDate, today, sprintCal) : 0,
       closed: closing,
       scopeChangePct: metrics.scopeChangePct,
       overloadedMembers,
@@ -468,6 +503,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     tasks,
     releases,
     velocity,
+    leaves: Object.fromEntries(members.map((m) => [m.id, m.leaves.map((l) => ({ start: l.startDate, end: l.endDate }))])),
   };
 }
 

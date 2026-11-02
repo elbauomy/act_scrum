@@ -1,5 +1,5 @@
 // Pure capacity calculations (no database access) so they are easy to test.
-import { eachDay, toISODate } from "./dates";
+import { addDays, eachDay, toISODate } from "./dates";
 
 export type WorkCalendar = {
   /** 0 = Sunday ... 6 = Saturday */
@@ -55,4 +55,15 @@ export function effectiveSprintLength(
   defaultDays: number,
 ): number {
   return lobDays ?? squadDays ?? defaultDays;
+}
+
+/** The date that is `n` working days after `from` (n = 0 returns `from`). Gives up after a year without a working day. */
+export function addWorkingDays(from: Date, n: number, cal: WorkCalendar): Date {
+  let d = from;
+  let left = n;
+  for (let guard = 0; left > 0 && guard < 800; guard++) {
+    d = addDays(d, 1);
+    if (isWorkingDay(d, cal)) left -= 1;
+  }
+  return d;
 }

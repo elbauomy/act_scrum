@@ -14,11 +14,30 @@ export type SprintSpan = {
   endDate: Date;
   /** memberId -> percent (0-100) of the member's hours this sprint gets while sprints overlap */
   overrides: Record<string, number>;
+  /** Periods the sprint was on hold. `end` is the last paused day, or null while it is still paused. */
+  pauses?: { start: Date; end: Date | null }[];
 };
+
+/** Was the sprint on hold on this day? */
+export function isPausedOn(s: SprintSpan, day: Date): boolean {
+  const t = day.getTime();
+  return (s.pauses ?? []).some((p) => p.start.getTime() <= t && (p.end == null || t <= p.end.getTime()));
+}
+
+/** The days of a sprint that fall inside a pause, as ISO dates (a pause still open counts up to `today`). */
+export function pausedDayKeys(pauses: { start: Date; end: Date | null }[], from: Date, to: Date, today: Date): Set<string> {
+  const keys = new Set<string>();
+  for (const p of pauses) {
+    const last = p.end ?? today;
+    for (const d of eachDay(p.start.getTime() > from.getTime() ? p.start : from, last.getTime() < to.getTime() ? last : to)) keys.add(toISODate(d));
+  }
+  return keys;
+}
 
 /** Share (0-1) of a member's hours on one day that each covering sprint gets. */
 export function daySharesFor(day: Date, memberId: string, sprints: SprintSpan[]): Record<string, number> {
-  const covering = sprints.filter((s) => s.startDate.getTime() <= day.getTime() && day.getTime() <= s.endDate.getTime());
+  // A sprint that is on hold on that day does not take part of the member's hours.
+  const covering = sprints.filter((s) => s.startDate.getTime() <= day.getTime() && day.getTime() <= s.endDate.getTime() && !isPausedOn(s, day));
   const shares: Record<string, number> = {};
   const overridden = covering.filter((s) => s.overrides[memberId] != null);
   const rest = covering.filter((s) => s.overrides[memberId] == null);

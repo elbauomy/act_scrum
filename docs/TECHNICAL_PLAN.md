@@ -161,6 +161,21 @@ day over the LOB's last 3 closed sprints).
 **Standup.** Suggestions: tasks the member finished since the previous working day (yesterday), tasks In
 Progress (today) and blocked tasks (blockers). Saved notes are kept per day.
 
+### Pausing a sprint and the daily plan
+
+**Pause / resume.** `SprintState` has a `PAUSED` state between ACTIVE and CLOSED, and `SprintPause` keeps the history
+(`startDate`, `resumedOn`, `reason`, `extendedByDays`). A sprint is paused *from* a date (today or earlier, not before the
+sprint start) and works again *on* `resumedOn`; the paused days are `startDate` up to the day before `resumedOn`.
+While paused: its tasks are not scheduled (the timeline shows "Sprint paused"), it takes no share of members' hours on paused days
+(`daySharesFor` skips a sprint on its paused days, so overlapping sprints get those hours), and paused days are not counted as working days
+in its burndown ideal line and "time elapsed". On resume, "move the end date out" adds the paused *working* days to the end date (skipping weekends and
+holidays, `addWorkingDays`) so the team keeps its full time; capacity taken from the planning sheet is not changed. A paused sprint can still be
+edited, have items moved, or be closed (closing ends the pause). A closed sprint can have its name, goal and release corrected but keeps its dates.
+
+**Daily plan** (`/timeline/daily`, `daily-plan.ts`). For each member and day it lists the user stories and, under each, the tasks planned that day with that
+day's hours (from `TaskPlan.byDay`, in schedule order), plus the tasks finished that day and the member's weekend, holiday or leave. Filters: squad, line of business,
+member, sprint, release, start date, number of days (1–28), members with no work, weekends and holidays. Excel export at `/api/export/daily-plan`.
+
 ### Sprint planning import
 
 The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Release 6 - Sprint 62"). Uploading it

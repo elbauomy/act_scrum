@@ -47,6 +47,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
             <option value="">Any state</option>
             <option value="PLANNED">Planned</option>
             <option value="ACTIVE">Active</option>
+            <option value="PAUSED">Paused</option>
             <option value="CLOSED">Closed</option>
           </select>
           <select name="release" defaultValue={f.release ?? ""} className={selectCls} aria-label="Release">
@@ -80,6 +81,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
                   <Th>Done</Th>
                   <Th>Health</Th>
                   <Th>Release</Th>
+                  <Th />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -96,6 +98,7 @@ export default async function SprintsPage({ searchParams }: PageProps<"/sprints"
                     <Td>{fmtH(s.summary.doneHours)}</Td>
                     <Td>{s.state === "PLANNED" ? <span className="text-slate-400">—</span> : <HealthBadge health={s.summary.health} />}</Td>
                     <Td className="text-xs">{s.releaseId ? <Link href={`/releases/${s.releaseId}`} className="hover:underline">{releaseName.get(s.releaseId)}</Link> : "—"}</Td>
+                    <Td className="text-right text-xs"><Link href={`/sprints/${s.id}#edit`} className="text-orange-700 hover:underline">Edit</Link></Td>
                   </tr>
                 ))}
               </tbody>

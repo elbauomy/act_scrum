@@ -12,11 +12,11 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Statuses | Story/Bug: New → Approved → Committed → Done. Task: New → In Progress → Done. Plus a separate Blocked flag with a reason. |
 | Estimation | Hours only, on tasks |
 | Burndown | A task's hours burn when it is marked Done |
-| Sprints | Belong to a LOB. Length can differ per squad and per LOB. Sprints may overlap. |
+| Sprints | Belong to a LOB. Length can differ per squad and per LOB. Sprints may overlap. Can be edited, paused (tasks unscheduled, no share of hours) and resumed with the end date optionally moved out. |
 | Releases | Belong to a LOB, contain several sprints, have a deployment date that can change, and every date change is logged |
 | Members | Can be in several squads, with hours per week in each. Leave reduces capacity. |
 | Working calendar | Working days, hours per day and holidays are all set in Settings |
-| Timeline | Built automatically from assignee availability only (no dependencies). Slips are shown, and nothing changes until the Scrum Master acts. |
+| Timeline | Built automatically from assignee availability only (no dependencies). Slips are shown, and nothing changes until the Scrum Master acts. A daily-plan view shows the user story and tasks each member works on every day. |
 | Priority | High / Medium / Low + drag-to-rank |
 | Item IDs | Per-LOB code + number, e.g. RB-12 |
 | Look | Orange theme; show/hide password on login |

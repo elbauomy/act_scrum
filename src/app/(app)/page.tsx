@@ -33,7 +33,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const inScope = (s: (typeof a.sprints)[number]) =>
     (!f.squad || s.squadId === f.squad) && (!f.lob || s.lobId === f.lob) && (!f.release || s.releaseId === f.release) && (!f.sprint || s.id === f.sprint) && (!from || s.end >= from) && (!to || s.start <= to);
   const scoped = a.sprints.filter(inScope);
-  const active = scoped.filter((s) => s.state === "ACTIVE" || (f.sprint && s.id === f.sprint && s.state !== "PLANNED"));
+  const active = scoped.filter((s) => s.state === "ACTIVE" || s.state === "PAUSED" || (f.sprint && s.id === f.sprint && s.state !== "PLANNED"));
+  const pausedCount = active.filter((s) => s.state === "PAUSED").length;
   const releases = a.releases.filter((r) => (!f.squad || r.squadId === f.squad) && (!f.lob || r.lobId === f.lob) && (!f.release || r.id === f.release) && !r.deployedDate && (!from || r.targetDate >= from) && (!to || r.targetDate <= to));
   const memberName = new Map(a.members.map((m) => [m.id, m.name]));
   const overloaded = scoped
@@ -96,7 +97,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       </Card>
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Stat label="Active sprints" value={active.length} />
+        <Stat label="Active sprints" value={active.length - pausedCount} hint={pausedCount ? `${pausedCount} paused` : undefined} />
         <Stat label="Average health" value={avgHealth ?? "—"} hint={avgHealth == null ? "No active sprint" : avgHealth >= 80 ? "Healthy" : avgHealth >= 60 ? "Watch" : "Needs action"} />
         <Stat label="Overloaded members" value={overloaded.length} hint="Assigned more than capacity" />
         <Stat label="Blocked items" value={blockedRows.length} hint={`${slipped} task(s) slipping`} />
@@ -115,7 +116,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               <Card key={s.id} title={`${s.lobKey} · ${s.name}`} actions={<HealthBadge health={sum.health} />}>
                 <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
                   <span>{s.squadName}</span>
-                  <span><SprintStateBadge state={s.state} /> {s.state === "ACTIVE" ? `${daysLeft} day(s) left` : "ended"}</span>
+                  <span><SprintStateBadge state={s.state} /> {s.state === "ACTIVE" ? `${daysLeft} day(s) left` : s.state === "PAUSED" ? `since ${formatDate(s.pauses.find((p) => !p.resumedOn)?.start ?? s.start)}` : "ended"}</span>
                 </div>
                 <div className="mb-3 grid grid-cols-3 gap-2 text-center text-sm">
                   <div><div className="font-semibold text-slate-900">{fmtH(sum.doneHours)}</div><div className="text-[11px] text-slate-500">done</div></div>

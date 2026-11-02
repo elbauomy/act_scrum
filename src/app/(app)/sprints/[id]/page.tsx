@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { loadAnalytics } from "@/lib/analytics";
 import { formatDate, toISODate } from "@/lib/dates";
+import { addWorkingDays, workingDaysBetween } from "@/lib/capacity";
+import { addDays } from "@/lib/dates";
 import { itemKey } from "@/lib/work-items";
-import { closeSprint, deleteSprint, saveSprintShare, startSprint, updateSprint } from "@/lib/actions/sprints";
+import { closeSprint, deleteSprint, pauseSprint, resumeSprint, saveSprintShare, startSprint, updateSprint } from "@/lib/actions/sprints";
 import { ActionForm, DeleteButton, SubmitButton } from "@/components/ui/forms";
 import { BurndownChart } from "@/components/charts";
 import { SprintButton } from "@/components/item-actions";
@@ -62,6 +64,11 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
       plan: sum.plans?.[mid] ?? null,
     }))
     .sort((x, y) => x.name.localeCompare(y.name));
+  const openPause = s.pauses.find((p) => !p.resumedOn) ?? null;
+  // If it resumed today, how far would the end date move?
+  const pausedWorkingDays = openPause && a.today.getTime() > openPause.start.getTime() ? workingDaysBetween(openPause.start, addDays(a.today, -1), a.cal) : 0;
+  const extendedEnd = pausedWorkingDays > 0 ? addWorkingDays(s.end, pausedWorkingDays, a.cal) : s.end;
+  const todayISO = toISODate(a.today);
   const loadPct = sum.totalCapacity > 0 ? Math.round((sum.currentHours / sum.totalCapacity) * 100) : null;
 
   return (
@@ -74,11 +81,18 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
             <SprintStateBadge state={s.state} />
             {s.state !== "PLANNED" && <HealthBadge health={sum.health} />}
             <LinkButton href="/sprints">← Sprints</LinkButton>
+            <LinkButton href="#edit">Edit sprint</LinkButton>
             <LinkButton href={`/board?sprint=${s.id}`}>Open board</LinkButton>
           </div>
         }
       />
       {s.goal && <p className="mb-4 rounded-md bg-orange-50 px-3 py-2 text-sm text-orange-900"><strong>Goal:</strong> {s.goal}</p>}
+      {openPause && (
+        <p role="status" className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <strong>Paused since {formatDate(openPause.start)}</strong>
+          {openPause.reason ? ` — ${openPause.reason}` : ""}. Its tasks are not scheduled and it takes no share of anyone&apos;s hours until you resume it.
+        </p>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Stat label={s.state === "PLANNED" ? "Planned hours" : "Committed"} value={fmtH(sum.committedHours)} hint={s.state === "PLANNED" ? "Locked in when the sprint starts" : "Snapshot at sprint start"} />
@@ -181,16 +195,46 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
             </Card>
           )}
 
-          <Card title="Sprint">
+          <Card title="Sprint status">
             {s.state === "PLANNED" && (
-              <ActionForm action={startSprint} className="mb-4" resetOnSuccess={false}>
+              <ActionForm action={startSprint} resetOnSuccess={false}>
                 <input type="hidden" name="id" value={s.id} />
                 <p className="mb-2 text-xs text-slate-500">Starting saves a snapshot of the planned hours. Scope changes are measured against it.</p>
                 <SubmitButton className="w-full">Start sprint</SubmitButton>
               </ActionForm>
             )}
+
             {s.state === "ACTIVE" && (
-              <ActionForm action={closeSprint} className="mb-4 space-y-2" resetOnSuccess={false}>
+              <ActionForm action={pauseSprint} className="space-y-2" resetOnSuccess={false}>
+                <input type="hidden" name="id" value={s.id} />
+                <p className="text-xs text-slate-500">Pause the sprint when the team has to stop working on it (for example they were pulled onto something urgent). While paused its tasks are not scheduled and it takes no share of anyone&apos;s hours.</p>
+                <Field label="Paused from"><Input type="date" name="date" required min={toISODate(s.start)} max={todayISO} defaultValue={todayISO} /></Field>
+                <Field label="Reason (optional)"><Input name="reason" maxLength={500} placeholder="e.g. Production incident" /></Field>
+                <SubmitButton variant="secondary" className="w-full">Pause sprint</SubmitButton>
+              </ActionForm>
+            )}
+
+            {s.state === "PAUSED" && openPause && (
+              <ActionForm action={resumeSprint} className="space-y-2" resetOnSuccess={false}>
+                <input type="hidden" name="id" value={s.id} />
+                <Field label="Back to work on" hint="The first day the team works on the sprint again.">
+                  <Input type="date" name="date" required min={toISODate(openPause.start)} max={todayISO} defaultValue={todayISO} />
+                </Field>
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input type="checkbox" name="extend" defaultChecked className="mt-1" />
+                  <span>
+                    Move the end date out by the working days it was paused
+                    <span className="block text-xs text-slate-500">
+                      {pausedWorkingDays > 0 ? `${pausedWorkingDays} working day(s) so far: ${formatDate(s.end)} → ${formatDate(extendedEnd)} if you resume today.` : "No working days have been lost so far."}
+                    </span>
+                  </span>
+                </label>
+                <SubmitButton className="w-full">Resume sprint</SubmitButton>
+              </ActionForm>
+            )}
+
+            {(s.state === "ACTIVE" || s.state === "PAUSED") && (
+              <ActionForm action={closeSprint} className="mt-4 space-y-2 border-t border-slate-200 pt-4" resetOnSuccess={false}>
                 <input type="hidden" name="id" value={s.id} />
                 <Field label="Unfinished stories and bugs go to" hint="Finished tasks stay in this sprint.">
                   <Select name="carryTo" defaultValue="">
@@ -198,21 +242,31 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
                     {otherOpen.map((x) => <option key={x.id} value={x.id}>{x.name} ({formatDate(x.start)})</option>)}
                   </Select>
                 </Field>
-                <SubmitButton className="w-full">Close sprint</SubmitButton>
+                <SubmitButton variant="secondary" className="w-full">Close sprint</SubmitButton>
               </ActionForm>
             )}
+
             {s.state === "CLOSED" && (
-              <p className="mb-3 text-sm text-slate-600">
+              <p className="text-sm text-slate-600">
                 Closed {s.closedAt ? formatDate(s.closedAt) : ""}. Carried over: {sum.carriedOverItems} of {sum.committedItems} committed item(s).
               </p>
             )}
-            {editable && (
-              <ActionForm action={updateSprint} className="space-y-3 border-t border-slate-200 pt-4" successMessage="Saved." resetOnSuccess={false}>
+
+            {s.state === "PLANNED" && (
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <DeleteButton action={deleteSprint} id={s.id} label="Delete sprint" confirmText={`Delete ${s.name}? Its items go back to the backlog.`} />
+              </div>
+            )}
+          </Card>
+
+          <div id="edit" className="scroll-mt-4">
+            <Card title="Edit sprint">
+              <ActionForm action={updateSprint} className="space-y-3" successMessage="Saved." resetOnSuccess={false}>
                 <input type="hidden" name="id" value={s.id} />
                 <Field label="Name"><Input name="name" required maxLength={100} defaultValue={s.name} /></Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Start"><Input type="date" name="startDate" required defaultValue={toISODate(s.start)} /></Field>
-                  <Field label="End"><Input type="date" name="endDate" required defaultValue={toISODate(s.end)} /></Field>
+                  <Field label="Start"><Input type="date" name="startDate" required defaultValue={toISODate(s.start)} readOnly={s.state === "CLOSED"} /></Field>
+                  <Field label="End"><Input type="date" name="endDate" required defaultValue={toISODate(s.end)} readOnly={s.state === "CLOSED"} /></Field>
                 </div>
                 <Field label="Goal"><Textarea name="goal" maxLength={1000} defaultValue={s.goal} /></Field>
                 <Field label="Release">
@@ -221,15 +275,33 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
                     {releases.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </Select>
                 </Field>
+                {s.state === "CLOSED" ? (
+                  <p className="text-xs text-slate-500">A closed sprint keeps its dates because its results are saved. You can still change its name, goal and release.</p>
+                ) : s.state !== "PLANNED" ? (
+                  <p className="text-xs text-slate-500">Moving the dates of a running sprint does not change the capacity taken from the planning sheet.</p>
+                ) : null}
                 <SubmitButton variant="secondary">Save changes</SubmitButton>
               </ActionForm>
-            )}
-            {s.state === "PLANNED" && (
-              <div className="mt-4 border-t border-slate-200 pt-4">
-                <DeleteButton action={deleteSprint} id={s.id} label="Delete sprint" confirmText={`Delete ${s.name}? Its items go back to the backlog.`} />
-              </div>
-            )}
-          </Card>
+            </Card>
+          </div>
+
+          {s.pauses.length > 0 && (
+            <Card title={`Pauses (${s.pauses.length})`}>
+              <ul className="space-y-3 text-sm">
+                {s.pauses.map((p) => (
+                  <li key={p.id} className="border-l-2 border-amber-300 pl-3">
+                    <div className="font-medium text-slate-800">
+                      {formatDate(p.start)} → {p.resumedOn ? formatDate(p.resumedOn) : "still paused"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {p.workingDays} working day(s){p.extendedByDays > 0 ? `, end date moved out by ${p.extendedByDays}` : p.resumedOn ? ", end date not moved" : ""}
+                    </div>
+                    {p.reason && <div className="text-slate-600">{p.reason}</div>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
       </div>
 

@@ -23,10 +23,14 @@ Open the member and add them to every squad they work in, with hours per week fo
 4. If another sprint of the same squad overlaps, each member's hours are shared between them. Set a percent next to a member to change the split.
 5. **Start sprint** — this saves the committed hours. Later changes show up as scope change.
 
+## When the team has to stop (pause a sprint)
+Open the sprint → **Sprint status** → **Pause sprint**, choose the day it stopped and add the reason. While paused, its tasks are left out of the timeline and the sprint takes no share of anyone's hours. When work starts again, choose **Resume sprint**: tick *Move the end date out* to give the team back the working days they lost. The sprint page keeps a list of every pause. **Edit sprint** (button at the top of the sprint page, or *Edit* in the sprint list) changes the name, dates, goal and release.
+
 ## Every day
 - **Daily Standup** — choose the squad and the date (today is selected for you), then type each person's status and Save. *Add task activity to the status* inserts what they finished and have in progress, if you want it.
 - **Sprint Board** — drag tasks between New / In Progress / Done. Switch to *Columns: member* and drag a task to reassign it.
-- **Timeline** — shows who is busy when, and which tasks would finish after their deadline. For each slip choose: reassign, change the hours, move the story to the next sprint, or **Accept new date** (it becomes the baseline).
+- **Timeline → Daily plan** — shows, for each person and each day, the user story and the tasks they work on, and what they finished. Use *Today* for the day's agenda or *This week* for the whole team's week.
+- **Timeline → Hours per member** — shows who is busy when, and which tasks would finish after their deadline. For each slip choose: reassign, change the hours, move the story to the next sprint, or **Accept new date** (it becomes the baseline).
 
 ## End of a sprint
 1. **Close sprint** — choose where unfinished stories and bugs go (next sprint or backlog). Finished tasks stay in the closed sprint, and its numbers are saved.

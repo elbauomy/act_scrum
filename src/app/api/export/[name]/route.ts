@@ -9,6 +9,8 @@ import { dateParam } from "@/lib/filters";
 import { addDays, formatDate, toISODate, todayUTC } from "@/lib/dates";
 import { buildReports, REPORTS, type ReportFilters } from "@/lib/reports";
 import { filterTimeline } from "@/lib/timeline-filter";
+import { loadDailyPlan, type DailyFilters } from "@/lib/daily-plan-data";
+import { WEEKDAYS } from "@/lib/dates";
 import { importTemplateSheets } from "@/lib/import";
 import { PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL } from "@/lib/work-items";
 
@@ -91,6 +93,33 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ name: strin
           rows,
         }]),
         "timeline",
+      );
+    }
+
+    case "daily-plan": {
+      const { rows } = await loadDailyPlan(q as DailyFilters);
+      const out = rows.flatMap((m) =>
+        m.days.flatMap((c) =>
+          c.stories.flatMap((st) =>
+            st.items.map((i) => ({
+              date: c.iso, day: WEEKDAYS[new Date(`${c.iso}T00:00:00Z`).getUTCDay()], member: m.name,
+              story: st.storyKey ? `${st.storyKey} ${st.storyTitle}` : "", task: `${i.key} ${i.title}`, hours: i.done ? null : i.hours, total: i.totalHours,
+              status: i.done ? "finished that day" : i.status === "IN_PROGRESS" ? "in progress" : "planned", blocked: i.blocked ? "yes" : "", sprint: i.sprintName,
+            })),
+          ),
+        ),
+      );
+      return file(
+        await buildWorkbook([{
+          title: "Daily plan",
+          note: "What each team member works on each day, planned from task hours and availability.",
+          columns: [
+            { key: "date", label: "Date" }, { key: "day", label: "Day" }, { key: "member", label: "Member" }, { key: "story", label: "User story" }, { key: "task", label: "Task" },
+            { key: "hours", label: "Hours that day", numeric: true }, { key: "total", label: "Task estimate h", numeric: true }, { key: "status", label: "Status" }, { key: "blocked", label: "Blocked" }, { key: "sprint", label: "Sprint" },
+          ],
+          rows: out,
+        }]),
+        "daily-plan",
       );
     }
 

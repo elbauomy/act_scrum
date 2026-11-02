@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   computeSprintMetrics, cycleTimeDays, daySharesFor, forecastFinish, healthLevel, movingAverage, scheduleTasks,
-  poolsFor, sprintHealth, sprintMemberCapacity, type MetricTask, type SprintSpan,
+  isPausedOn, pausedDayKeys, poolsFor, sprintHealth, sprintMemberCapacity, type MetricTask, type SprintSpan,
 } from "./planning";
 import { parseDate, toISODate } from "./dates";
+import { addWorkingDays } from "./capacity";
 
 const d = parseDate;
 // Mon-Fri week, no holidays
@@ -45,6 +46,31 @@ describe("shared capacity between overlapping sprints", () => {
     const leaves = [{ startDate: d("2026-11-03"), endDate: d("2026-11-03") }];
     const holiday = { ...cal, holidays: new Set(["2026-11-04"]) };
     expect(sprintMemberCapacity({ sprint: s, squadSprints: [s], memberId: "m", weeklyHours: 40, cal: holiday, leaves }).hours).toBe(24);
+  });
+});
+
+describe("paused sprints", () => {
+  const A = { ...span("A", "2026-11-02", "2026-11-06"), pauses: [{ start: d("2026-11-04"), end: d("2026-11-05") }] };
+  const B = span("B", "2026-11-02", "2026-11-06");
+  it("knows which days are paused, including a pause that is still open", () => {
+    expect(isPausedOn(A, d("2026-11-03"))).toBe(false);
+    expect(isPausedOn(A, d("2026-11-04"))).toBe(true);
+    expect(isPausedOn(A, d("2026-11-05"))).toBe(true);
+    expect(isPausedOn(A, d("2026-11-06"))).toBe(false);
+    expect(isPausedOn({ ...B, pauses: [{ start: d("2026-11-04"), end: null }] }, d("2026-12-01"))).toBe(true);
+    expect([...pausedDayKeys([{ start: d("2026-11-04"), end: null }], d("2026-11-02"), d("2026-11-10"), d("2026-11-06"))]).toEqual(["2026-11-04", "2026-11-05", "2026-11-06"]);
+  });
+  it("gives a paused sprint no hours on paused days and lets the other sprint have them", () => {
+    const base = { squadSprints: [A, B], memberId: "m", weeklyHours: 40, cal, leaves: [] as { startDate: Date; endDate: Date }[] };
+    // A: Mon, Tue, Fri shared with B (4h each = 12h); Wed and Thu paused (0). B: same shared days (12h) + the 2 paused days alone (16h)
+    expect(sprintMemberCapacity({ ...base, sprint: A }).hours).toBe(12);
+    expect(sprintMemberCapacity({ ...base, sprint: B }).hours).toBe(28);
+  });
+  it("moves an end date forward by working days", () => {
+    const cal2 = { workingDays: [1, 2, 3, 4, 5], holidays: new Set(["2026-11-10"]) };
+    expect(toISODate(addWorkingDays(d("2026-11-06"), 0, cal2))).toBe("2026-11-06");
+    expect(toISODate(addWorkingDays(d("2026-11-06"), 1, cal2))).toBe("2026-11-09");
+    expect(toISODate(addWorkingDays(d("2026-11-06"), 2, cal2))).toBe("2026-11-11"); // skips the holiday on the 10th
   });
 });
 

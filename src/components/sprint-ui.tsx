@@ -26,9 +26,10 @@ export function healthText(level: Health["level"]): string {
 const STATE: Record<SprintState, string> = {
   PLANNED: "bg-slate-100 text-slate-700",
   ACTIVE: "bg-orange-100 text-orange-800",
+  PAUSED: "bg-amber-100 text-amber-900",
   CLOSED: "bg-green-100 text-green-800",
 };
-const STATE_LABEL: Record<SprintState, string> = { PLANNED: "Planned", ACTIVE: "Active", CLOSED: "Closed" };
+const STATE_LABEL: Record<SprintState, string> = { PLANNED: "Planned", ACTIVE: "Active", PAUSED: "Paused", CLOSED: "Closed" };
 
 export function SprintStateBadge({ state }: { state: SprintState }) {
   return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-medium", STATE[state])}>{STATE_LABEL[state]}</span>;
