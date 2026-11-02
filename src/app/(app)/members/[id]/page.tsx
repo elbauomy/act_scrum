@@ -13,6 +13,7 @@ import {
   updateMember,
 } from "@/lib/actions/members";
 import { ActionForm, DeleteButton, SubmitButton } from "@/components/ui/forms";
+import { LobSplitForm } from "@/components/lob-split-form";
 import { Badge, Card, Empty, Field, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 
 const WEEKS_AHEAD = 4;
@@ -23,7 +24,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
     db.member.findUnique({
       where: { id },
       include: {
-        memberships: { include: { squad: true }, orderBy: { squad: { name: "asc" } } },
+        memberships: { include: { squad: { include: { lobs: { orderBy: { name: "asc" } } } }, lobAllocations: true }, orderBy: { squad: { name: "asc" } } },
         leaves: { orderBy: { startDate: "desc" } },
       },
     }),
@@ -148,6 +149,27 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
               </ActionForm>
             )}
           </Card>
+
+          {member.memberships.some((ms) => ms.squad.lobs.length > 0) && (
+            <Card title="Split across lines of business">
+              <p className="mb-4 text-sm text-slate-500">
+                Optional. A supervisor who shares time between several lines of business can reserve hours for each. Hours you don&apos;t reserve stay shared by all of the squad&apos;s lines,
+                split by the sprints that overlap. A reserved line only gives its hours to its own sprints, tasks and timeline.
+              </p>
+              <div className="space-y-6">
+                {member.memberships.filter((ms) => ms.squad.lobs.length > 0).map((ms) => (
+                  <div key={ms.id} className="border-t border-slate-200 pt-4 first:border-0 first:pt-0">
+                    <LobSplitForm
+                      membershipId={ms.id}
+                      squadName={ms.squad.name}
+                      weeklyHours={ms.weeklyHours}
+                      lobs={ms.squad.lobs.map((l) => ({ id: l.id, key: l.key, name: l.name, hours: ms.lobAllocations.find((a) => a.lobId === l.id)?.weeklyHours ?? null }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card title={`Available hours — next ${WEEKS_AHEAD} weeks`}>
             {member.memberships.length === 0 ? (

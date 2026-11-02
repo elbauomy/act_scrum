@@ -67,6 +67,11 @@ export async function saveMembership(_prev: ActionState, formData: FormData): Pr
     const memberId = String(formData.get("memberId"));
     const squadId = z.string().min(1, "Please choose a squad").parse(formData.get("squadId"));
     const hours = weeklyHours.parse(formData.get("weeklyHours"));
+    const existing = await db.squadMembership.findUnique({ where: { memberId_squadId: { memberId, squadId } }, include: { lobAllocations: true } });
+    const reserved = existing?.lobAllocations.reduce((sum, a) => sum + a.weeklyHours, 0) ?? 0;
+    if (hours + 1e-9 < reserved) {
+      return { error: `${reserved} h/week are already reserved for lines of business in this squad. Reduce those hours first, or enter at least ${reserved}.` };
+    }
     await db.squadMembership.upsert({
       where: { memberId_squadId: { memberId, squadId } },
       update: { weeklyHours: hours },
@@ -117,6 +122,44 @@ export async function deleteLeave(_prev: ActionState, formData: FormData): Promi
   await requireAuth();
   try {
     await db.leave.delete({ where: { id: String(formData.get("id")) } });
+  } catch (err) {
+    return toActionError(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Reserve hours per week for lines of business inside one squad membership.
+ * Fields are named `hours_<lobId>`; empty or 0 removes the reservation. Whatever is left stays shared by the squad's lines.
+ */
+export async function saveLobAllocations(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const membershipId = String(formData.get("membershipId"));
+    const membership = await db.squadMembership.findUnique({ where: { id: membershipId }, include: { squad: { include: { lobs: { select: { id: true } } } } } });
+    if (!membership) return { error: "This squad membership no longer exists." };
+    const wanted: { lobId: string; hours: number }[] = [];
+    for (const lob of membership.squad.lobs) {
+      const raw = formData.get(`hours_${lob.id}`);
+      if (raw == null || String(raw).trim() === "") continue;
+      const hours = weeklyHours.parse(raw);
+      if (hours > 0) wanted.push({ lobId: lob.id, hours });
+    }
+    const total = wanted.reduce((sum, w) => sum + w.hours, 0);
+    if (total > membership.weeklyHours + 1e-9) {
+      return { error: `The lines add up to ${total} h/week, but the member has ${membership.weeklyHours} h/week in ${membership.squad.name}. Lower the hours or raise the squad hours first.` };
+    }
+    await db.$transaction([
+      db.memberLobAllocation.deleteMany({ where: { membershipId, lobId: { notIn: wanted.map((w) => w.lobId) } } }),
+      ...wanted.map((w) =>
+        db.memberLobAllocation.upsert({
+          where: { membershipId_lobId: { membershipId, lobId: w.lobId } },
+          update: { weeklyHours: w.hours },
+          create: { membershipId, lobId: w.lobId, weeklyHours: w.hours },
+        }),
+      ),
+    ]);
   } catch (err) {
     return toActionError(err);
   }

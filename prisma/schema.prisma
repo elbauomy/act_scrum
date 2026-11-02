@@ -41,22 +41,23 @@ model Squad {
 
 /// A Line of Business (LOB) is the "project". Owned by exactly one squad.
 model LineOfBusiness {
-  id               String     @id @default(cuid())
-  name             String     @unique
-  description      String     @default("")
+  id               String                @id @default(cuid())
+  name             String                @unique
+  description      String                @default("")
   squadId          String
-  squad            Squad      @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  squad            Squad                 @relation(fields: [squadId], references: [id], onDelete: Restrict)
   /// Overrides the squad / system sprint length (days)
   sprintLengthDays Int?
   /// Short code used in item IDs, e.g. "RB" -> RB-12
-  key              String     @unique
+  key              String                @unique
   /// Next item number to hand out in this LOB
-  nextItemNumber   Int        @default(1)
+  nextItemNumber   Int                   @default(1)
   workItems        WorkItem[]
   sprints          Sprint[]
   releases         Release[]
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  allocations      MemberLobAllocation[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([squadId])
 }
@@ -78,12 +79,14 @@ model Member {
 
 /// Hours per week a member gives to a squad.
 model SquadMembership {
-  id          String @id @default(cuid())
-  memberId    String
-  squadId     String
-  weeklyHours Float
-  member      Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  squad       Squad  @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  id             String                @id @default(cuid())
+  memberId       String
+  squadId        String
+  weeklyHours    Float
+  member         Member                @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  squad          Squad                 @relation(fields: [squadId], references: [id], onDelete: Restrict)
+  /// Optional split of the weekly hours across the squad's lines of business
+  lobAllocations MemberLobAllocation[]
 
   @@unique([memberId, squadId])
   @@index([squadId])
@@ -295,4 +298,18 @@ model StandupEntry {
 
   @@unique([date, squadId, memberId])
   @@index([squadId, date])
+}
+
+/// Hours per week a member reserves for one line of business inside a squad.
+/// Whatever is left of the squad hours stays shared by all of the squad's lines of business.
+model MemberLobAllocation {
+  id           String          @id @default(cuid())
+  membershipId String
+  lobId        String
+  weeklyHours  Float
+  membership   SquadMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  lob          LineOfBusiness  @relation(fields: [lobId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, lobId])
+  @@index([lobId])
 }

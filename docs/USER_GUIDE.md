@@ -6,6 +6,9 @@ A simple rhythm for running your squads. Every list has filters at the top; the 
 1. **Settings** — tick your working days, set hours per day, the default sprint length, and add public holidays.
 2. **Squads** → **Lines of Business** (each belongs to one squad and gets a short code such as `RB`) → **Members** (name, role, hours per week in each squad, and leave).
 
+### Supervisors who share their time
+Open the member and add them to every squad they work in, with hours per week for each. Under **Split across lines of business** you can reserve hours for individual lines (for example 24 h for RB and 10 h for CB inside a 40 h squad). The hours you don't reserve (6 h here) are shared by all of the squad's lines through the sprints that overlap. Sprint capacity, the board, the timeline and the reports all use this split.
+
 ## Before a sprint
 1. **Backlog** — create epics, features, stories/bugs and tasks. Give every task an assignee and hours.
 2. **Sprints → New sprint** — pick the line of business. The end date follows the sprint length (line of business, then squad, then default).

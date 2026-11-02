@@ -13,6 +13,7 @@ import {
   isSlipped,
   scheduleTasks,
   sprintHealth,
+  poolsFor,
   sprintMemberCapacity,
   type Health,
   type SprintMetrics,
@@ -143,7 +144,7 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     db.holiday.findMany(),
     db.squad.findMany({ orderBy: { name: "asc" } }),
     db.lineOfBusiness.findMany({ orderBy: { name: "asc" } }),
-    db.member.findMany({ orderBy: { name: "asc" }, include: { memberships: true, leaves: true } }),
+    db.member.findMany({ orderBy: { name: "asc" }, include: { memberships: { include: { lobAllocations: true } }, leaves: true } }),
     db.sprint.findMany({ include: { shares: true, commitments: true }, orderBy: [{ startDate: "asc" }, { name: "asc" }] }),
     db.workItem.findMany({
       select: {
@@ -180,13 +181,22 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     overrides: Object.fromEntries(s.shares.map((x) => [x.memberId, x.percent])),
   });
   const spansBySquad = new Map<string, SprintSpan[]>();
+  const spansByLob = new Map<string, SprintSpan[]>();
   for (const s of sprintRows) {
     const squadId = lobById.get(s.lobId)!.squadId;
-    (spansBySquad.get(squadId) ?? spansBySquad.set(squadId, []).get(squadId)!).push(spanOf(s));
+    const span = spanOf(s);
+    (spansBySquad.get(squadId) ?? spansBySquad.set(squadId, []).get(squadId)!).push(span);
+    (spansByLob.get(s.lobId) ?? spansByLob.set(s.lobId, []).get(s.lobId)!).push(span);
   }
 
   const leavesOf = (memberId: string): LeaveRange[] => memberById.get(memberId)?.leaves ?? [];
-  const weeklyOf = (memberId: string, squadId: string) => memberById.get(memberId)?.memberships.find((m) => m.squadId === squadId)?.weeklyHours ?? 0;
+  /** Squad hours of a member, split into the pool reserved for one LOB and the shared pool. */
+  const poolsOf = (memberId: string, squadId: string, lobId: string) => {
+    const ms = memberById.get(memberId)?.memberships.find((m) => m.squadId === squadId);
+    if (!ms) return { lobWeekly: 0, sharedWeekly: 0 };
+    const allocations = Object.fromEntries(ms.lobAllocations.filter((x) => lobById.get(x.lobId)?.squadId === squadId).map((x) => [x.lobId, x.weeklyHours]));
+    return poolsFor(ms.weeklyHours, allocations, lobId);
+  };
 
   // ---- timeline schedule for open tasks in planned and active sprints ----
   const sprintById = new Map(sprintRows.map((s) => [s.id, s]));
@@ -214,10 +224,15 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
       id: t.id,
       memberId: t.assigneeId!,
       squadId: lobById.get(t.lobId)!.squadId,
+      lobId: t.lobId,
       hours: t.estimateHours!,
       earliest: sprintById.get(t.sprintId!)!.startDate,
     })),
-    (memberId, squadId, day) => dailyHours(day, weeklyOf(memberId, squadId), cal, leavesOf(memberId)),
+    (memberId, squadId, lobId, day) => {
+      const pools = poolsOf(memberId, squadId, lobId);
+      const leaves = leavesOf(memberId);
+      return { lob: dailyHours(day, pools.lobWeekly, cal, leaves), shared: dailyHours(day, pools.sharedWeekly, cal, leaves) };
+    },
     today,
   );
 
@@ -341,7 +356,16 @@ export async function loadAnalytics(opts: { asClosed?: string } = {}): Promise<A
     for (const m of members) {
       const ms = m.memberships.find((x) => x.squadId === squad.id);
       if (!ms || !m.active) continue;
-      const c = sprintMemberCapacity({ sprint: span, squadSprints: squadSpans, memberId: m.id, weeklyHours: ms.weeklyHours, cal, leaves: m.leaves });
+      const c = sprintMemberCapacity({
+        sprint: span,
+        squadSprints: squadSpans,
+        lobSprints: spansByLob.get(lob.id) ?? [],
+        memberId: m.id,
+        weeklyHours: ms.weeklyHours,
+        pools: poolsOf(m.id, squad.id, lob.id),
+        cal,
+        leaves: m.leaves,
+      });
       capacityByMember[m.id] = c.hours;
       overAllocated ||= c.overAllocated;
     }

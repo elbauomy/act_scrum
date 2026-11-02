@@ -45,6 +45,8 @@ export async function updateLob(_prev: ActionState, formData: FormData): Promise
     if (current && current.squadId !== data.squadId && current._count.workItems > 0) {
       return { error: "This line of business already has work items, so its squad cannot be changed." };
     }
+    // Hours reserved for this line belong to its old squad's memberships, so they end when it moves.
+    if (current && current.squadId !== data.squadId) await db.memberLobAllocation.deleteMany({ where: { lobId: id } });
     await db.lineOfBusiness.update({ where: { id }, data });
   } catch (err) {
     return friendly(err);

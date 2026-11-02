@@ -16,7 +16,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
         ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { role: { contains: q, mode: "insensitive" as const } }] } : {}),
       },
       orderBy: { name: "asc" },
-      include: { memberships: { include: { squad: true } }, leaves: true },
+      include: { memberships: { include: { squad: true, lobAllocations: { include: { lob: { select: { key: true } } } } } }, leaves: true },
     }),
     db.squad.findMany({ orderBy: { name: "asc" } }),
     getSettings(),
@@ -74,7 +74,10 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                       <Td>
                         {m.memberships.length === 0
                           ? <span className="text-slate-400">No squad</span>
-                          : m.memberships.map((ms) => `${ms.squad.name} (${ms.weeklyHours}h)`).join(", ")}
+                          : m.memberships.map((ms) => {
+                              const split = ms.lobAllocations.map((a) => `${a.lob.key} ${a.weeklyHours}h`).join(", ");
+                              return `${ms.squad.name} (${ms.weeklyHours}h${split ? `: ${split}` : ""})`;
+                            }).join(", ")}
                       </Td>
                       <Td>{m.memberships.reduce((s, ms) => s + ms.weeklyHours, 0)} h</Td>
                       <Td className="space-x-1">
@@ -105,7 +108,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                 ))}
               </Select>
             </Field>
-            <Field label="Hours per week in this squad" hint="You can add more squads from the member's page.">
+            <Field label="Hours per week in this squad" hint="Add more squads, and split hours across lines of business, from the member's page.">
               <Input type="number" name="weeklyHours" step="0.5" min="0" max="168" defaultValue={suggestedWeekly} />
             </Field>
             <SubmitButton>Add member</SubmitButton>

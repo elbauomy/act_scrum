@@ -272,7 +272,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
           </Table>
         )}
         <div className="mt-3 space-y-1 text-xs text-slate-500">
-          <p>Capacity = the member&apos;s hours in {s.squadName} after weekends, holidays and leave.</p>
+          <p>Capacity = the member&apos;s hours for this line of business (hours reserved for it, plus its share of the squad&apos;s unreserved hours) after weekends, holidays and leave.</p>
           {overlapping.length > 0 ? (
             <p className="text-amber-700">
               Overlaps with {overlapping.map((o) => o.name).join(", ")}: on shared days each sprint gets an equal share of a member&apos;s hours unless you set a percent above.

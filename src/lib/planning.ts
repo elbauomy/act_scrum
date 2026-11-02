@@ -31,23 +31,63 @@ export function daySharesFor(day: Date, memberId: string, sprints: SprintSpan[])
 
 export type MemberCapacity = { hours: number; overAllocated: boolean };
 
-/** Hours one member can give one sprint, after weekends, holidays, leave and sharing with overlapping sprints. */
+/** How a member's weekly hours in one squad are pooled for one line of business. */
+export type HourPools = {
+  /** Hours per week reserved for this line of business only */
+  lobWeekly: number;
+  /** Hours per week left over, shared by every line of business of the squad */
+  sharedWeekly: number;
+};
+
+/**
+ * Split a membership's hours into the pool of one LOB and the shared pool.
+ * `allocations` maps lobId -> reserved hours per week (only LOBs of this squad). Reserved hours never exceed the total.
+ */
+export function poolsFor(weeklyHours: number, allocations: Record<string, number>, lobId: string): HourPools {
+  let left = Math.max(0, weeklyHours);
+  let lobWeekly = 0;
+  let reserved = 0;
+  for (const [id, hours] of Object.entries(allocations)) {
+    const h = Math.min(Math.max(0, hours), left);
+    left -= h;
+    reserved += h;
+    if (id === lobId) lobWeekly = h;
+  }
+  return { lobWeekly, sharedWeekly: Math.max(0, weeklyHours - reserved) };
+}
+
+/**
+ * Hours one member can give one sprint, after weekends, holidays, leave and sharing with overlapping sprints.
+ * The LOB's reserved hours are shared only with other sprints of the same LOB; the remaining squad hours are
+ * shared with every sprint of the squad that covers the day.
+ */
 export function sprintMemberCapacity(args: {
   sprint: SprintSpan;
+  /** All sprints of the squad (any line of business) */
   squadSprints: SprintSpan[];
+  /** Sprints of the same line of business as `sprint` (including it). Defaults to the squad's sprints. */
+  lobSprints?: SprintSpan[];
   memberId: string;
+  /** Squad hours per week. With `pools` this is ignored. */
   weeklyHours: number;
+  pools?: HourPools;
   cal: WorkCalendar;
   leaves: LeaveRange[];
 }): MemberCapacity {
-  const { sprint, squadSprints, memberId, weeklyHours, cal, leaves } = args;
+  const { sprint, squadSprints, memberId, cal, leaves } = args;
+  const pools = args.pools ?? { lobWeekly: 0, sharedWeekly: args.weeklyHours };
+  const lobSprints = args.lobSprints ?? squadSprints;
   let hours = 0;
   let overAllocated = false;
   for (const day of eachDay(sprint.startDate, sprint.endDate)) {
-    const shares = daySharesFor(day, memberId, squadSprints);
-    const total = Object.values(shares).reduce((a, b) => a + b, 0);
-    if (total > 1.0001) overAllocated = true;
-    hours += dailyHours(day, weeklyHours, cal, leaves) * (shares[sprint.id] ?? 0);
+    const shared = daySharesFor(day, memberId, squadSprints);
+    if (Object.values(shared).reduce((a, b) => a + b, 0) > 1.0001) overAllocated = true;
+    hours += dailyHours(day, pools.sharedWeekly, cal, leaves) * (shared[sprint.id] ?? 0);
+    if (pools.lobWeekly > 0) {
+      const own = daySharesFor(day, memberId, lobSprints);
+      if (Object.values(own).reduce((a, b) => a + b, 0) > 1.0001) overAllocated = true;
+      hours += dailyHours(day, pools.lobWeekly, cal, leaves) * (own[sprint.id] ?? 0);
+    }
   }
   return { hours: Math.round(hours * 100) / 100, overAllocated };
 }
@@ -60,6 +100,7 @@ export type ScheduleTask = {
   id: string;
   memberId: string;
   squadId: string;
+  lobId: string;
   hours: number;
   /** Earliest day work may start (e.g. the sprint start) */
   earliest: Date;
@@ -75,11 +116,12 @@ export type TaskPlan = {
 
 /**
  * Fill each member's days with their tasks, in the order given.
- * Hours of one member in one squad are shared by all of that member's tasks in that squad.
+ * A task first uses the hours the member reserved for its line of business, then the squad's shared hours.
+ * Those pools are shared by all of the member's tasks, across overlapping sprints.
  */
 export function scheduleTasks(
   orderedTasks: ScheduleTask[],
-  availability: (memberId: string, squadId: string, day: Date) => number,
+  availability: (memberId: string, squadId: string, lobId: string, day: Date) => { lob: number; shared: number },
   today: Date,
   horizonDays = 400,
 ): Map<string, TaskPlan> {
@@ -91,12 +133,20 @@ export function scheduleTasks(
     let day = t.earliest.getTime() > today.getTime() ? t.earliest : today;
     const last = addDays(day, horizonDays);
     while (need > 1e-9 && day.getTime() <= last.getTime()) {
-      const k = `${t.memberId}|${t.squadId}|${toISODate(day)}`;
-      const free = left.get(k) ?? availability(t.memberId, t.squadId, day);
-      const take = Math.min(free, need);
-      left.set(k, free - take);
+      const iso = toISODate(day);
+      const lobKey = `${t.memberId}|${t.squadId}|L${t.lobId}|${iso}`;
+      const sharedKey = `${t.memberId}|${t.squadId}|S|${iso}`;
+      let pools: { lob: number; shared: number } | null = null;
+      const pool = () => (pools ??= availability(t.memberId, t.squadId, t.lobId, day));
+      const freeLob = left.get(lobKey) ?? pool().lob;
+      const fromLob = Math.min(freeLob, need);
+      left.set(lobKey, freeLob - fromLob);
+      const freeShared = left.get(sharedKey) ?? pool().shared;
+      const fromShared = Math.min(freeShared, need - fromLob);
+      left.set(sharedKey, freeShared - fromShared);
+      const take = fromLob + fromShared;
       if (take > 1e-9) {
-        plan.byDay[toISODate(day)] = (plan.byDay[toISODate(day)] ?? 0) + take;
+        plan.byDay[iso] = (plan.byDay[iso] ?? 0) + take;
         plan.start ??= day;
         plan.end = day;
         need -= take;

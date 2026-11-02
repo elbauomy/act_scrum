@@ -138,7 +138,16 @@ CLOSED (*Close* saves the final numbers into `Sprint.result`, marks unfinished c
 carried over, and moves them and their open tasks to the chosen sprint or back to the backlog). Closed
 sprints are read-only and are reported from the saved result, so later changes never rewrite history.
 
-**Shared capacity.** A member's hours in a squad are split between all of that squad's sprints that cover
+**Members shared across squads and lines of business.** A member can belong to several squads, with hours per
+week in each (`SquadMembership.weeklyHours`). Inside one squad the hours can optionally be reserved per line of
+business (`MemberLobAllocation`, total never above the squad hours). Hours that are not reserved stay in a
+shared pool for all of the squad's lines. Capacity of a sprint = the member's reserved hours for its line
+(shared only with that line's overlapping sprints) + its share of the shared pool (shared with all of the
+squad's overlapping sprints). The timeline schedules a task from its line's reserved hours first, then the
+shared pool. With no reservations everything behaves as before. Assignees must still belong to the squad
+that owns the line of business.
+
+**Shared capacity.** A member's unreserved hours in a squad are split between all of that squad's sprints that cover
 a day. Default is an even split; an override (percent) on a sprint takes its share first and the rest is
 divided among the other sprints. Overrides adding up to more than 100% on a day raise a warning.
 Sprints of any LOB in the same squad compete for the same hours.

@@ -20,7 +20,7 @@ function flatten(records: Record<string, unknown>[]): { columns: Col[]; rows: Ro
 
 /** Every table in the database, one sheet each. */
 export async function buildBackupSheets(): Promise<Sheet[]> {
-  const [settings, holidays, squads, lobs, members, memberships, leaves, items, history, sprints, shares, commitments, releases, changes, baselines, standups] = await Promise.all([
+  const [settings, holidays, squads, lobs, members, memberships, leaves, items, history, sprints, shares, commitments, releases, changes, baselines, standups, lobAllocations] = await Promise.all([
     db.setting.findMany(),
     db.holiday.findMany({ orderBy: { date: "asc" } }),
     db.squad.findMany({ orderBy: { name: "asc" } }),
@@ -37,12 +37,13 @@ export async function buildBackupSheets(): Promise<Sheet[]> {
     db.releaseDateChange.findMany({ orderBy: { changedAt: "asc" } }),
     db.taskBaseline.findMany(),
     db.standupEntry.findMany({ orderBy: { date: "asc" } }),
+    db.memberLobAllocation.findMany(),
   ]);
   const lobKey = new Map(lobs.map((l) => [l.id, l.key]));
   const itemsWithKey = items.map(({ ...i }) => ({ key: itemKey(lobKey.get(i.lobId) ?? "?", i.number), ...i }));
   const tables: [string, Record<string, unknown>[]][] = [
     ["Settings", settings], ["Holidays", holidays], ["Squads", squads], ["LinesOfBusiness", lobs], ["Members", members],
-    ["SquadMemberships", memberships], ["Leave", leaves], ["WorkItems", itemsWithKey], ["WorkItemHistory", history],
+    ["SquadMemberships", memberships], ["MemberLobAllocations", lobAllocations], ["Leave", leaves], ["WorkItems", itemsWithKey], ["WorkItemHistory", history],
     ["Sprints", sprints], ["SprintShares", shares], ["SprintCommitments", commitments], ["Releases", releases],
     ["ReleaseDateChanges", changes], ["TaskBaselines", baselines], ["Standups", standups],
   ];
