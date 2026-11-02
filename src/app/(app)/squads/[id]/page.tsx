@@ -55,7 +55,7 @@ export default async function SquadPage({ params }: PageProps<"/squads/[id]">) {
               <ul className="divide-y divide-slate-100">
                 {squad.lobs.map((l) => (
                   <li key={l.id} className="flex justify-between py-2 text-sm">
-                    <Link href={`/lobs/${l.id}`} className="font-medium text-indigo-700 hover:underline">{l.name}</Link>
+                    <Link href={`/lobs/${l.id}`} className="font-medium text-orange-700 hover:underline">{l.name}</Link>
                     <span className="text-slate-500">
                       Sprint: {l.sprintLengthDays ?? squad.sprintLengthDays ?? settings.defaultSprintLengthDays} days
                     </span>
@@ -82,7 +82,7 @@ export default async function SquadPage({ params }: PageProps<"/squads/[id]">) {
                   {squad.memberships.map((m) => (
                     <tr key={m.id}>
                       <Td>
-                        <Link href={`/members/${m.member.id}`} className="font-medium text-indigo-700 hover:underline">{m.member.name}</Link>
+                        <Link href={`/members/${m.member.id}`} className="font-medium text-orange-700 hover:underline">{m.member.name}</Link>
                       </Td>
                       <Td>{m.member.role || "—"}</Td>
                       <Td>{m.weeklyHours} h</Td>

@@ -5,8 +5,8 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ACT Scrum",
-  description: "Squad, sprint and delivery tracking for ACT",
+  title: "Solo Scrum",
+  description: "Squad, sprint and delivery tracking",
   robots: { index: false, follow: false },
 };
 

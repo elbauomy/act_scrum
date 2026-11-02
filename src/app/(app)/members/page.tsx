@@ -68,7 +68,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/members"
                   return (
                     <tr key={m.id}>
                       <Td>
-                        <Link href={`/members/${m.id}`} className="font-medium text-indigo-700 hover:underline">{m.name}</Link>
+                        <Link href={`/members/${m.id}`} className="font-medium text-orange-700 hover:underline">{m.name}</Link>
                       </Td>
                       <Td>{m.role || "—"}</Td>
                       <Td>

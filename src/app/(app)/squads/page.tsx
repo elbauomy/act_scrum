@@ -50,7 +50,7 @@ export default async function SquadsPage({ searchParams }: PageProps<"/squads">)
                   return (
                     <tr key={s.id}>
                       <Td>
-                        <Link href={`/squads/${s.id}`} className="font-medium text-indigo-700 hover:underline">
+                        <Link href={`/squads/${s.id}`} className="font-medium text-orange-700 hover:underline">
                           {s.name}
                         </Link>
                         {s.description && <div className="text-xs text-slate-500">{s.description}</div>}

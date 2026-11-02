@@ -1,4 +1,4 @@
-# ACT Scrum — Technical Plan
+# Solo Scrum — Technical Plan
 
 This is the technical reference for the whole project. The agreed product scope is in
 [PRODUCT_PLAN.md](./PRODUCT_PLAN.md). Each phase updates this file when a design decision changes.
@@ -7,7 +7,7 @@ This is the technical reference for the whole project. The agreed product scope 
 
 - **Simple over clever.** One app, one database, one host. No microservices, no queues, no extra paid services.
 - **One user (v1).** The Scrum Master is the only login. Squad members are records, not accounts.
-- **Free hosting.** Netlify (free plan) + Neon PostgreSQL (free plan) + GitHub.
+- **Free hosting.** Vercel (Hobby) + Neon PostgreSQL (free plan) + GitHub. `netlify.toml` is kept as an alternative.
 - **History instead of background jobs.** Every change that affects a report (status, estimate,
   sprint membership, release date) is written to a history table. Reports are calculated from this
   history when you open them, so no daily scheduled job is needed.
@@ -79,15 +79,30 @@ in code as UTC midnight, so time zones never shift a day.
 
 **Effective sprint length** = LOB value → squad value → system default (first one set wins).
 
-### Phase 2 — work items
+### Phase 2 — work items (built)
 
 | Table | Key fields |
 |---|---|
-| `WorkItem` | `type` (EPIC, FEATURE, STORY, BUG, TASK), `title`, `description`, `lobId`, `parentId`, `status`, `priority` (HIGH/MEDIUM/LOW), `rank` (manual order), `assigneeId?` (tasks), `estimateHours?` (tasks), `sprintId?` (stories/bugs; tasks inherit it), `blocked`, `blockedReason`, timestamps |
+| `WorkItem` | `type` (EPIC, FEATURE, STORY, BUG, TASK), `title`, `description`, `lobId`, `parentId`, `status`, `priority` (HIGH/MEDIUM/LOW), `rank` (manual order), `assigneeId?` (tasks), `estimateHours?` (tasks), `blocked`, `blockedReason`, timestamps |
 | `WorkItemHistory` | `workItemId`, `field` (status, estimate, sprint, assignee, blocked), `oldValue`, `newValue`, `changedAt` |
 
-Hierarchy rules: Epic → Feature → Story/Bug → Task. Epics hang under a LOB. Every task must have a
-story or bug as its parent.
+Hierarchy rules (`src/lib/work-items.ts`): Epic (top level) → Feature (parent Epic, required) →
+Story/Bug (parent Feature, optional) → Task (parent Story or Bug, required). Every item belongs to one
+LOB. Children take their LOB from the parent, and an item can only move to a parent in the same LOB.
+
+IDs: each LOB has a short `key` (2–6 letters/digits, e.g. `RB`) and a `nextItemNumber` counter, so
+items are numbered `RB-1`, `RB-2`, … for each LOB. Existing LOBs got a key generated from their name
+by the phase 2 migration, and it can be edited.
+
+Fields: title, description, acceptance criteria (stories/bugs), priority, rank, status, assignee and
+estimate (tasks only), blocked flag + reason, `doneAt` (set on entering DONE). Bugs have no hours of
+their own; like stories, their hours come from tasks.
+
+Assignees must be members of the squad that owns the LOB. Deleting a member unassigns their tasks.
+Deleting an item is blocked while it has children. Deleting a LOB is blocked while it has items,
+and its squad cannot change once it has items.
+
+History rows are written for: created, title, status, priority, assignee, estimate, blocked, parent.
 Statuses: Story/Bug = NEW → APPROVED → COMMITTED → DONE; Task = NEW → IN_PROGRESS → DONE.
 Story/bug hours = sum of their tasks. Epic/feature progress is calculated from their children.
 
@@ -95,7 +110,7 @@ Story/bug hours = sum of their tasks. Epic/feature progress is calculated from t
 
 | Table | Key fields |
 |---|---|
-| `Sprint` | `lobId`, `name`, `goal`, `startDate`, `endDate`, `state` (PLANNED, ACTIVE, CLOSED), `releaseId?` |
+| `Sprint` | `lobId`, `name`, `goal`, `startDate`, `endDate`, `state` (PLANNED, ACTIVE, CLOSED), `releaseId?`. Stories/bugs get `sprintId?` and their tasks follow them. |
 | `SprintMemberCapacity` | `sprintId`, `memberId`, `hours` (auto-filled, editable) |
 | `SprintCommitment` | Snapshot taken at sprint start: `sprintId`, `workItemId`, `estimateHours` |
 | `Release` | `lobId`, `name`, `version`, `targetDate`, `deployedDate?`, `state` |

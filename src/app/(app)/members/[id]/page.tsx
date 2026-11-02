@@ -112,7 +112,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
                   {member.memberships.map((ms) => (
                     <tr key={ms.id}>
                       <Td>
-                        <Link href={`/squads/${ms.squad.id}`} className="font-medium text-indigo-700 hover:underline">{ms.squad.name}</Link>
+                        <Link href={`/squads/${ms.squad.id}`} className="font-medium text-orange-700 hover:underline">{ms.squad.name}</Link>
                       </Td>
                       <Td>
                         <ActionForm action={saveMembership} className="flex items-center gap-2" resetOnSuccess={false}>
@@ -202,7 +202,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
                         <Td>{formatDate(l.startDate)}</Td>
                         <Td>{formatDate(l.endDate)}</Td>
                         <Td>{l.note || "—"}</Td>
-                        <Td>{current ? <Badge tone="amber">Now</Badge> : past ? <Badge>Past</Badge> : <Badge tone="indigo">Upcoming</Badge>}</Td>
+                        <Td>{current ? <Badge tone="amber">Now</Badge> : past ? <Badge>Past</Badge> : <Badge tone="orange">Upcoming</Badge>}</Td>
                         <Td className="text-right">
                           <DeleteButton action={deleteLeave} id={l.id} confirmText="Delete this leave?" />
                         </Td>

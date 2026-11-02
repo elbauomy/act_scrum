@@ -27,13 +27,19 @@ export function LobFields({
   values,
 }: {
   squads: { id: string; name: string; sprintLengthDays: number | null }[];
-  values?: { name: string; description: string; squadId: string; sprintLengthDays: number | null };
+  values?: { name: string; description: string; squadId: string; sprintLengthDays: number | null; key?: string };
 }) {
   return (
     <>
-      <Field label="Name">
-        <Input name="name" required maxLength={100} defaultValue={values?.name} />
-      </Field>
+      <div className="grid grid-cols-[1fr_7rem] gap-3">
+        <Field label="Name">
+          <Input name="name" required maxLength={100} defaultValue={values?.name} />
+        </Field>
+        <Field label="Code">
+          <Input name="key" required minLength={2} maxLength={6} pattern="[A-Za-z][A-Za-z0-9]{1,5}" placeholder="RB" defaultValue={values?.key} className="uppercase" title="2-6 letters or digits, starting with a letter" />
+        </Field>
+      </div>
+      <p className="-mt-1 text-xs text-slate-500">The code starts every item ID in this line of business, e.g. RB-12.</p>
       <Field label="Owning squad">
         <Select name="squadId" required defaultValue={values?.squadId ?? ""}>
           <option value="" disabled>

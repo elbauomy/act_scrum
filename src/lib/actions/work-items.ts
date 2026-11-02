@@ -1,0 +1,255 @@
+"use server";
+
+import type { Prisma, WorkItemStatus, WorkItemType } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { requireAuth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { type ActionState, toActionError } from "@/lib/action-state";
+import { PARENT_TYPES, PRIORITIES, TYPES, nextRank, statusesFor, TYPE_LABEL, validateParent } from "@/lib/work-items";
+
+type Tx = Prisma.TransactionClient;
+
+const optionalId = z.preprocess((v) => (v === "" || v == null ? null : String(v)), z.string().nullable());
+const hours = z.preprocess(
+  (v) => (v === "" || v == null ? null : Number(v)),
+  z.number({ message: "Hours must be a number" }).min(0, "Hours cannot be negative").max(1000, "Hours must be 1000 or less").nullable(),
+);
+
+const createSchema = z.object({
+  type: z.enum(TYPES as [WorkItemType, ...WorkItemType[]]),
+  title: z.string().trim().min(1, "Title is required").max(200, "Title is too long"),
+  lobId: optionalId,
+  parentId: optionalId,
+  priority: z.enum(PRIORITIES as [string, ...string[]]).default("MEDIUM"),
+  assigneeId: optionalId,
+  estimateHours: hours,
+});
+
+async function assertAssignee(tx: Tx, assigneeId: string | null, lobId: string) {
+  if (!assigneeId) return;
+  const lob = await tx.lineOfBusiness.findUniqueOrThrow({ where: { id: lobId }, select: { squadId: true } });
+  const inSquad = await tx.squadMembership.findFirst({ where: { memberId: assigneeId, squadId: lob.squadId } });
+  if (!inSquad) throw new UserError("The assignee must be a member of the squad that owns this line of business.");
+}
+
+class UserError extends Error {}
+
+function fail(err: unknown): ActionState {
+  if (err instanceof UserError) return { error: err.message };
+  return toActionError(err);
+}
+
+function refresh() {
+  revalidatePath("/", "layout");
+}
+
+export async function createWorkItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const data = createSchema.parse(Object.fromEntries(formData.entries()));
+    await db.$transaction(async (tx) => {
+      let lobId = data.lobId;
+      let parentType: WorkItemType | null = null;
+      if (data.parentId) {
+        const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true } });
+        if (!parent) throw new UserError("The chosen parent no longer exists.");
+        parentType = parent.type;
+        lobId = parent.lobId;
+      }
+      const parentError = validateParent(data.type, parentType);
+      if (parentError) throw new UserError(parentError);
+      if (!lobId) throw new UserError("Please choose a line of business.");
+
+      const isTask = data.type === "TASK";
+      await assertAssignee(tx, isTask ? data.assigneeId : null, lobId);
+
+      const lob = await tx.lineOfBusiness.update({
+        where: { id: lobId },
+        data: { nextItemNumber: { increment: 1 } },
+        select: { nextItemNumber: true },
+      });
+      const siblings = await tx.workItem.findMany({
+        where: { lobId, parentId: data.parentId ?? null },
+        select: { rank: true },
+      });
+      const item = await tx.workItem.create({
+        data: {
+          type: data.type,
+          number: lob.nextItemNumber - 1,
+          title: data.title,
+          priority: data.priority as "HIGH" | "MEDIUM" | "LOW",
+          lobId,
+          parentId: data.parentId,
+          assigneeId: isTask ? data.assigneeId : null,
+          estimateHours: isTask ? data.estimateHours : null,
+          rank: nextRank(siblings.map((s) => s.rank)),
+        },
+      });
+      await tx.workItemHistory.create({ data: { workItemId: item.id, field: "created", newValue: data.type } });
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+const updateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1, "Title is required").max(200, "Title is too long"),
+  description: z.string().max(10000, "Description is too long").default(""),
+  acceptanceCriteria: z.string().max(10000, "Acceptance criteria are too long").default(""),
+  priority: z.enum(PRIORITIES as [string, ...string[]]),
+  status: z.string().optional(),
+  parentId: optionalId,
+  assigneeId: optionalId,
+  estimateHours: hours,
+  blocked: z.preprocess((v) => v === "on", z.boolean()),
+  blockedReason: z.string().trim().max(500, "Blocked reason is too long").default(""),
+});
+
+type Change = { field: string; oldValue: string | null; newValue: string | null };
+
+export async function updateWorkItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const data = updateSchema.parse(Object.fromEntries(formData.entries()));
+    await db.$transaction(async (tx) => {
+      const item = await tx.workItem.findUnique({ where: { id: data.id } });
+      if (!item) throw new UserError("This item no longer exists.");
+      const isTask = item.type === "TASK";
+
+      // Parent: may move within the same line of business only.
+      let parentId = item.parentId;
+      if (PARENT_TYPES[item.type].length > 0 && data.parentId !== item.parentId) {
+        let parentType: WorkItemType | null = null;
+        if (data.parentId) {
+          if (data.parentId === item.id) throw new UserError("An item cannot be its own parent.");
+          const parent = await tx.workItem.findUnique({ where: { id: data.parentId }, select: { type: true, lobId: true } });
+          if (!parent) throw new UserError("The chosen parent no longer exists.");
+          if (parent.lobId !== item.lobId) throw new UserError("The parent must be in the same line of business.");
+          parentType = parent.type;
+        }
+        const parentError = validateParent(item.type, parentType);
+        if (parentError) throw new UserError(parentError);
+        parentId = data.parentId;
+      }
+
+      const allowed = statusesFor(item.type);
+      const status = (data.status && allowed.includes(data.status as WorkItemStatus) ? data.status : item.status) as WorkItemStatus;
+      const assigneeId = isTask ? data.assigneeId : null;
+      if (assigneeId !== item.assigneeId) await assertAssignee(tx, assigneeId, item.lobId);
+      const estimateHours = isTask ? data.estimateHours : null;
+      const blockedReason = data.blocked ? data.blockedReason : "";
+
+      const changes: Change[] = [];
+      const track = (field: string, a: unknown, b: unknown) => {
+        const oldValue = a == null || a === "" ? null : String(a);
+        const newValue = b == null || b === "" ? null : String(b);
+        if (oldValue !== newValue) changes.push({ field, oldValue, newValue });
+      };
+      track("title", item.title, data.title);
+      track("status", item.status, status);
+      track("priority", item.priority, data.priority);
+      track("assignee", item.assigneeId, assigneeId);
+      track("estimate", item.estimateHours, estimateHours);
+      track("blocked", item.blocked ? item.blockedReason || "yes" : null, data.blocked ? blockedReason || "yes" : null);
+      track("parent", item.parentId, parentId);
+
+      let rank = item.rank;
+      if (parentId !== item.parentId) {
+        const siblings = await tx.workItem.findMany({ where: { lobId: item.lobId, parentId }, select: { rank: true } });
+        rank = nextRank(siblings.map((s) => s.rank));
+      }
+
+      await tx.workItem.update({
+        where: { id: item.id },
+        data: {
+          title: data.title,
+          description: data.description,
+          acceptanceCriteria: data.acceptanceCriteria,
+          priority: data.priority as "HIGH" | "MEDIUM" | "LOW",
+          status,
+          parentId,
+          rank,
+          assigneeId,
+          estimateHours,
+          blocked: data.blocked,
+          blockedReason,
+          doneAt: status === "DONE" ? (item.status === "DONE" ? item.doneAt : new Date()) : null,
+        },
+      });
+      if (changes.length) {
+        await tx.workItemHistory.createMany({ data: changes.map((c) => ({ workItemId: item.id, ...c })) });
+      }
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Quick status change from lists and boards. */
+export async function setWorkItemStatus(id: string, status: WorkItemStatus): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const item = await db.workItem.findUnique({ where: { id } });
+    if (!item) return { error: "This item no longer exists." };
+    if (!statusesFor(item.type).includes(status)) {
+      return { error: `${TYPE_LABEL[item.type]} cannot have that status.` };
+    }
+    if (item.status === status) return { ok: true };
+    await db.$transaction([
+      db.workItem.update({
+        where: { id },
+        data: { status, doneAt: status === "DONE" ? new Date() : null },
+      }),
+      db.workItemHistory.create({ data: { workItemId: id, field: "status", oldValue: item.status, newValue: status } }),
+    ]);
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Save a new order for items that share the same parent (or are top level in the same LOB). */
+export async function reorderWorkItems(orderedIds: string[]): Promise<ActionState> {
+  await requireAuth();
+  try {
+    const ids = z.array(z.string().min(1)).min(1).max(1000).parse(orderedIds);
+    const items = await db.workItem.findMany({ where: { id: { in: ids } }, select: { id: true, parentId: true, lobId: true } });
+    if (items.length !== ids.length) return { error: "Some items no longer exist. Please reload the page." };
+    const first = items[0];
+    if (!items.every((i) => i.parentId === first.parentId && i.lobId === first.lobId)) {
+      return { error: "Items can only be re-ordered within the same parent." };
+    }
+    await db.$transaction(ids.map((id, index) => db.workItem.update({ where: { id }, data: { rank: index + 1 } })));
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteWorkItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAuth();
+  const id = String(formData.get("id"));
+  let backTo = "/backlog";
+  try {
+    const item = await db.workItem.findUnique({ where: { id }, include: { _count: { select: { children: true } } } });
+    if (!item) return { error: "This item no longer exists." };
+    if (item._count.children > 0) {
+      return { error: `Cannot delete: this item has ${item._count.children} child item(s). Delete or move them first.` };
+    }
+    if (item.parentId) backTo = `/items/${item.parentId}`;
+    await db.workItem.delete({ where: { id } });
+  } catch (err) {
+    return fail(err);
+  }
+  refresh();
+  redirect(backTo);
+}

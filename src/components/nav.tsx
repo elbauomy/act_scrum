@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "./ui";
 
-type NavItem = { href: string; label: string; soon?: boolean };
+type NavItem = { href: string; label: string; soon?: boolean; also?: string[] };
 
 const sections: { title: string; items: NavItem[] }[] = [
   { title: "Overview", items: [{ href: "/", label: "Dashboard" }] },
@@ -19,7 +19,7 @@ const sections: { title: string; items: NavItem[] }[] = [
   {
     title: "Delivery",
     items: [
-      { href: "#", label: "Backlog", soon: true },
+      { href: "/backlog", label: "Backlog", also: ["/items"] },
       { href: "#", label: "Sprints", soon: true },
       { href: "#", label: "Releases", soon: true },
       { href: "#", label: "Timeline", soon: true },
@@ -47,14 +47,17 @@ export function Nav() {
                   </li>
                 );
               }
-              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : [item.href, ...(item.also ?? [])].some((p) => pathname.startsWith(p));
               return (
                 <li key={item.label}>
                   <Link
                     href={item.href}
                     className={cn(
                       "block rounded-md px-3 py-1.5 text-sm",
-                      active ? "bg-indigo-50 font-medium text-indigo-700" : "text-slate-700 hover:bg-slate-100",
+                      active ? "bg-orange-50 font-medium text-orange-700" : "text-slate-700 hover:bg-slate-100",
                     )}
                   >
                     {item.label}

@@ -14,18 +14,27 @@ export function ActionForm({
   className,
   successMessage,
   resetOnSuccess = true,
+  onSuccess,
 }: {
   action: Action;
   children: ReactNode;
   className?: string;
   successMessage?: string;
   resetOnSuccess?: boolean;
+  /** Runs after a successful submit (after React has reset the form). */
+  onSuccess?: () => void;
 }) {
   const [state, formAction] = useActionState(action, {});
   const ref = useRef<HTMLFormElement>(null);
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  });
 
   useEffect(() => {
-    if (state.ok && resetOnSuccess) ref.current?.reset();
+    if (!state.ok) return;
+    if (resetOnSuccess) ref.current?.reset();
+    onSuccessRef.current?.();
   }, [state, resetOnSuccess]);
 
   return (
