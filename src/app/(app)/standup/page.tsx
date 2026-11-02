@@ -5,8 +5,9 @@ import { isWorkingDay } from "@/lib/capacity";
 import { addDays, formatDate, todayUTC, toISODate, WEEKDAYS } from "@/lib/dates";
 import { applyCls, dateParam, selectCls, toQuery } from "@/lib/filters";
 import { itemKey } from "@/lib/work-items";
+import { isStandupLeave } from "@/lib/standup";
 import { AutoSubmitForm, LocalDateDefault, StandupMemberForm } from "@/components/standup-form";
-import { Card, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Badge, Card, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
 
 type Q = { squad?: string; date?: string; member?: string; from?: string; to?: string; hsquad?: string; hmember?: string };
 
@@ -31,7 +32,7 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
   // A member filter that belongs to another squad is ignored, so changing the squad never leaves an empty page.
   const memberships = f.member && squadMemberships.some((m) => m.memberId === f.member) ? squadMemberships.filter((m) => m.memberId === f.member) : squadMemberships;
   const memberIds = memberships.map((m) => m.memberId);
-  const [entries, tasks] = await Promise.all([
+  const [entries, tasks, leavesOn, offAnywhere] = await Promise.all([
     db.standupEntry.findMany({ where: { date, squadId, memberId: { in: memberIds } } }),
     db.workItem.findMany({
       where: {
@@ -43,9 +44,38 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
       include: { lob: { select: { key: true } } },
       orderBy: [{ rank: "asc" }, { number: "asc" }],
     }),
+    db.leave.findMany({ where: { memberId: { in: memberIds }, startDate: { lte: date }, endDate: { gte: date } } }),
+    db.standupEntry.findMany({ where: { date, memberId: { in: memberIds }, off: true } }),
   ]);
   const entryOf = new Map(entries.map((e) => [e.memberId, e]));
+  const offIds = new Set(offAnywhere.map((e) => e.memberId));
   const line = (t: (typeof tasks)[number]) => `${itemKey(t.lob.key, t.number)} ${t.title}${t.estimateHours != null ? ` (${t.estimateHours}h)` : ""}`;
+
+  const cards = memberships.map(({ member }) => {
+    const e = entryOf.get(member.id);
+    const mine = tasks.filter((t) => t.assigneeId === member.id);
+    const done = mine.filter((t) => t.status === "DONE").map(line);
+    const doing = mine.filter((t) => t.status === "IN_PROGRESS").map(line);
+    const suggestion = [done.length ? `Finished since ${formatDate(prev)}:\n- ${done.join("\n- ")}` : "", doing.length ? `In progress:\n- ${doing.join("\n- ")}` : ""].filter(Boolean).join("\n");
+    const blockedList = mine.filter((t) => t.blocked).map((t) => `${line(t)}${t.blockedReason ? ` — ${t.blockedReason}` : ""}`).join("\n");
+    // Notes saved in the earlier format (yesterday / today) are shown as one status until they are edited.
+    const initialStatus = e ? e.status || [e.yesterday && `Yesterday: ${e.yesterday}`, e.today && `Today: ${e.today}`].filter(Boolean).join("\n") : "";
+    // Leave on that day: added by this page (can be undone here) or on the member's own page (cannot)
+    const mine2 = leavesOn.filter((l) => l.memberId === member.id);
+    const sameDay = (l: (typeof leavesOn)[number]) => l.startDate.getTime() === date.getTime() && l.endDate.getTime() === date.getTime();
+    const viaStandup = mine2.find((l) => sameDay(l) && isStandupLeave(l.note));
+    const external = mine2.find((l) => !(sameDay(l) && isStandupLeave(l.note)));
+    const off = Boolean(e?.off) || offIds.has(member.id) || Boolean(viaStandup) || Boolean(external);
+    const leaveNote = external && !viaStandup && !e?.off && !offIds.has(member.id) ? external.note || "recorded as leave" : null;
+    const standupLeaveReason = viaStandup ? viaStandup.note.replace(/^Off - daily standup:?\s*/, "") : "";
+    return { member, e, off, leaveNote, suggestion, blockedList, initialStatus, standupLeaveReason };
+  });
+  const offCount = cards.filter((c) => c.off).length;
+  const summary = (
+    <p className="text-sm text-slate-600">
+      {cards.length - offCount} present{offCount > 0 ? <> · <strong className="text-amber-800">{offCount} off</strong> ({cards.filter((c) => c.off).map((c) => c.member.name).join(", ")})</> : null}
+    </p>
+  );
 
   // History
   const hFrom = dateParam(f.from) ?? addDays(todayUTC(), -13);
@@ -95,30 +125,33 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
         <Card><Empty>No active members in {squad.name}. Add them on the Members page.</Empty></Card>
       ) : (
         <div className="space-y-4">
-          {memberships.map(({ member }) => {
-            const e = entryOf.get(member.id);
-            const mine = tasks.filter((t) => t.assigneeId === member.id);
-            const done = mine.filter((t) => t.status === "DONE").map(line);
-            const doing = mine.filter((t) => t.status === "IN_PROGRESS").map(line);
-            const suggestion = [done.length ? `Finished since ${formatDate(prev)}:\n- ${done.join("\n- ")}` : "", doing.length ? `In progress:\n- ${doing.join("\n- ")}` : ""].filter(Boolean).join("\n");
-            const blockedList = mine.filter((t) => t.blocked).map((t) => `${line(t)}${t.blockedReason ? ` — ${t.blockedReason}` : ""}`).join("\n");
-            // Notes saved in the earlier format (yesterday / today) are shown as one status until they are edited.
-            const initialStatus = e ? e.status || [e.yesterday && `Yesterday: ${e.yesterday}`, e.today && `Today: ${e.today}`].filter(Boolean).join("\n") : "";
-            return (
-              <Card key={member.id} title={member.name} actions={<span className="text-xs text-slate-500">{e ? `Saved ${e.updatedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Not entered yet"}</span>}>
-                <StandupMemberForm
-                  key={`${squadId}-${toISODate(date)}-${member.id}`}
-                  date={toISODate(date)}
-                  squadId={squadId}
-                  memberId={member.id}
-                  initialStatus={initialStatus}
-                  initialBlockers={e?.blockers ?? ""}
-                  suggestion={suggestion}
-                  blockerSuggestion={blockedList}
-                />
-              </Card>
-            );
-          })}
+          {summary}
+          {cards.map((c) => (
+            <Card
+              key={c.member.id}
+              title={c.member.name}
+              actions={
+                <span className="flex items-center gap-2 text-xs text-slate-500">
+                  {c.off && <Badge tone="amber">Off today</Badge>}
+                  {c.e ? `Saved ${c.e.updatedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : c.off ? "From leave" : "Not entered yet"}
+                </span>
+              }
+            >
+              <StandupMemberForm
+                key={`${squadId}-${toISODate(date)}-${c.member.id}`}
+                date={toISODate(date)}
+                squadId={squadId}
+                memberId={c.member.id}
+                initialStatus={c.initialStatus}
+                initialBlockers={c.e?.blockers ?? ""}
+                suggestion={c.suggestion}
+                blockerSuggestion={c.blockedList}
+                initialOff={c.off}
+                initialOffReason={c.e?.offReason ?? c.standupLeaveReason}
+                leaveNote={c.leaveNote}
+              />
+            </Card>
+          ))}
         </div>
       )}
 
@@ -153,7 +186,9 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
                   <Td className="whitespace-nowrap"><Link className="hover:underline" href={`/standup${toQuery({ squad: h.squadId, date: toISODate(h.date) })}`}>{formatDate(h.date)}</Link></Td>
                   <Td>{h.squad.name}</Td>
                   <Td>{h.member.name}</Td>
-                  <Td className="whitespace-pre-wrap text-xs">{h.status || [h.yesterday && `Yesterday: ${h.yesterday}`, h.today && `Today: ${h.today}`].filter(Boolean).join("\n") || "—"}</Td>
+                  <Td className="whitespace-pre-wrap text-xs">
+                    {h.off ? <span className="font-medium text-amber-800">Off{h.offReason ? `: ${h.offReason}` : ""}</span> : h.status || [h.yesterday && `Yesterday: ${h.yesterday}`, h.today && `Today: ${h.today}`].filter(Boolean).join("\n") || "—"}
+                  </Td>
                   <Td className={`whitespace-pre-wrap text-xs ${h.blockers ? "text-red-700" : ""}`}>{h.blockers || "—"}</Td>
                 </tr>
               ))}

@@ -298,6 +298,9 @@ model StandupEntry {
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   /// The member's status for the day, typed by hand
   status    String   @default("")
+  /// The member is not working that day (leave, sick, day off...)
+  off       Boolean  @default(false)
+  offReason String   @default("")
   yesterday String   @default("")
   today     String   @default("")
   blockers  String   @default("")

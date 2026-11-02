@@ -176,6 +176,14 @@ edited, have items moved, or be closed (closing ends the pause). A closed sprint
 day's hours (from `TaskPlan.byDay`, in schedule order), plus the tasks finished that day and the member's weekend, holiday or leave. Filters: squad, line of business,
 member, sprint, release, start date, number of days (1–28), members with no work, weekends and holidays. Excel export at `/api/export/daily-plan`.
 
+### Deleting
+
+`deleteMember` / `deleteMembers` (members cascade to squad hours, leave, sprint plans and standup notes; their tasks are unassigned),
+`deleteSprints` (planned sprints only; items return to the backlog through `moveItemToSprint`; others are reported and kept) and
+`deleteWorkItems` (an item is deleted only if all of its children are deleted in the same request; children go first, one level at a time).
+Tables use `BulkDeleteBar` (checkboxes tied to one form with `form="bulk-..." name="id"`, so the tables stay server components); the backlog tree keeps its own selection
+and selects an item's whole subtree when it is ticked.
+
 ### Sprint planning import
 
 The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Release 6 - Sprint 62"). Uploading it
@@ -196,7 +204,7 @@ The team plans each sprint in a spreadsheet (see the Sonata sheet "Sonata - Rele
 
 **Capacity and timeline.** When a `SprintMemberPlan` exists its `capacityHours` replaces the calculated capacity for that member in that sprint, so Load and Remaining match the sheet. The scheduler multiplies each task's available hours by `capacityHours ÷ calculated capacity` (efficiency), so meetings and vacation slow the timeline down. Dates, slips and overloads then fill in automatically from the hours.
 
-**Standup.** `StandupEntry.status` holds the status typed by hand (plus optional blockers). Entries saved in the earlier yesterday / today format are shown as one status and converted the first time they are edited. The date defaults to the date on the user's own clock.
+**Standup.** `StandupEntry.off` / `offReason` mark a day off. Saving it clears the status, adds a one-day `Leave` whose note starts with `Off - daily standup` (so it can be found and removed when unticked; a leave added on the member's page is shown but left alone), and sets the same flag on the member's notes in other squads for that day. `StandupEntry.status` holds the status typed by hand (plus optional blockers). Entries saved in the earlier yesterday / today format are shown as one status and converted the first time they are edited. The date defaults to the date on the user's own clock.
 
 ## 5. Capacity and scheduling algorithm
 
