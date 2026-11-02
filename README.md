@@ -46,6 +46,12 @@ releases, the timeline and Scrum reports, following ACT's own process.
 
 To change the password later, edit `APP_PASSWORD` in Netlify and redeploy.
 
+## Deploying on Vercel (alternative)
+
+`vercel.json` is included. In <https://vercel.com/new>, import the `act_scrum` repository and add the
+same four environment variables (`DATABASE_URL`, `DIRECT_URL`, `APP_PASSWORD`, `SESSION_SECRET`)
+before clicking **Deploy**. The build creates and updates the database tables automatically.
+
 ## Running locally (developers)
 
 ```bash
