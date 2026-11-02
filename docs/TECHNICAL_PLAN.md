@@ -7,7 +7,7 @@ This is the technical reference for the whole project. The agreed product scope 
 
 - **Simple over clever.** One app, one database, one host. No microservices, no queues, no extra paid services.
 - **One user (v1).** The Scrum Master is the only login. Squad members are records, not accounts.
-- **Free hosting.** Render (free web service) + Neon PostgreSQL (free plan) + GitHub.
+- **Free hosting.** Netlify (free plan) + Neon PostgreSQL (free plan) + GitHub.
 - **History instead of background jobs.** Every change that affects a report (status, estimate,
   sprint membership, release date) is written to a history table. Reports are calculated from this
   history when you open them, so no daily scheduled job is needed.
@@ -161,7 +161,7 @@ scope stability + 15% load balance + 15% blocked/overdue items. Green ≥ 80, Am
 ## 7. Security
 
 - `APP_PASSWORD` (the login password) and `SESSION_SECRET` (signs the session cookie) live only in
-  Render environment variables, never in the code.
+  Netlify environment variables, never in the code.
 - Session cookie: `httpOnly`, `secure`, `sameSite=lax`, lasts 30 days.
 - `proxy.ts` sends anyone not signed in to `/login`. Every Server Action calls `requireAuth()`.
 - All database access goes through Prisma (no hand-built SQL), and all input is validated with Zod.
@@ -170,21 +170,17 @@ scope stability + 15% load balance + 15% blocked/overdue items. Green ≥ 80, Am
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `DATABASE_URL` | Render + local `.env` | Neon **pooled** connection string (used by the app) |
-| `DIRECT_URL` | Render + local `.env` | Neon **direct** connection string (used for migrations) |
-| `APP_PASSWORD` | Render + local `.env` | Login password |
-| `SESSION_SECRET` | Render + local `.env` | Random string of 32+ characters |
+| `DATABASE_URL` | Netlify + local `.env` | Neon **pooled** connection string (used by the app) |
+| `DIRECT_URL` | Netlify + local `.env` | Neon **direct** connection string (used for migrations) |
+| `APP_PASSWORD` | Netlify + local `.env` | Login password |
+| `SESSION_SECRET` | Netlify + local `.env` | Random string of 32+ characters |
 
-**Render** (`render.yaml` Blueprint): a free Node web service in Frankfurt.
-Build: `npm ci --include=dev && npx prisma migrate deploy && npm run build`. Start: `npm start`
-(`next start` listens on Render's `PORT`). Health check: `/login`. Database changes are applied
-automatically on each deploy. Prisma's `native` engine target matches Render's Linux because the build runs there.
-Free services sleep after 15 minutes idle and take up to about a minute to wake.
+**Netlify build** (`netlify.toml`): `prisma migrate deploy` then `next build`. Database changes are
+applied automatically on each deploy. Netlify detects Next.js and adds its Next.js runtime itself.
+The Prisma engine is built for Netlify's Linux (`rhel-openssl-3.0.x`).
 
-*Why not Netlify:* the app deployed fine, but `*.netlify.app` addresses time out on the owner's home
-and mobile internet providers, while `*.onrender.com` is reachable.
-
-**Branches**: work happens on a feature branch, and `main` is what Render deploys.
+**Branches**: work happens on a feature branch, and `main` is what Netlify publishes. Every pull request
+gets a Netlify preview link so you can test before merging.
 
 **Backups**: Neon free has short restore history, so phase 6 adds a "Download full backup" Excel export.
 
