@@ -2,7 +2,17 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 /** What every form action returns. */
-export type ActionState = { error?: string; ok?: boolean; message?: string; details?: string[] };
+import type { SprintImportPreview } from "./sprint-sheet";
+
+export type ActionState = {
+  error?: string;
+  ok?: boolean;
+  message?: string;
+  details?: string[];
+  /** Sprint planning import: what was read from the sheet and what will happen */
+  preview?: SprintImportPreview;
+  link?: { href: string; label: string };
+};
 
 export const initialState: ActionState = {};
 

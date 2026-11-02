@@ -1,5 +1,6 @@
 import "server-only";
 import ExcelJS from "exceljs";
+import { looksLikePlanningSheet, parseCsv, type Grid } from "./sprint-sheet";
 import type { Col, Row } from "./reports";
 
 export type Sheet = { title: string; columns: Col[]; rows: Row[]; note?: string };
@@ -82,4 +83,44 @@ export async function readFirstSheet(data: ArrayBuffer): Promise<{ headers: stri
     if (any) rows.push(rec);
   });
   return { headers, rows };
+}
+
+const MAX_ROWS = 3000;
+const MAX_COLS = 120;
+
+function cellToText(v: ExcelJS.CellValue): string {
+  if (v == null) return "";
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "object") {
+    if ("richText" in v) return v.richText.map((t) => t.text).join("");
+    if ("result" in v) return v.result == null ? "" : cellToText(v.result as ExcelJS.CellValue);
+    if ("text" in v) return String((v as { text: unknown }).text ?? "");
+    if ("error" in v) return String((v as { error: unknown }).error ?? "");
+    return "";
+  }
+  return String(v);
+}
+
+/** Every worksheet of an .xlsx file (or the single table of a .csv file) as a grid of text. */
+export async function readGrids(fileName: string, data: ArrayBuffer): Promise<{ sheet: string; grid: Grid }[]> {
+  if (/\.csv$/i.test(fileName)) return [{ sheet: "CSV", grid: parseCsv(new TextDecoder("utf-8").decode(data)) }];
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(data);
+  return wb.worksheets.map((ws) => {
+    const grid: Grid = [];
+    ws.eachRow({ includeEmpty: true }, (row, n) => {
+      if (n > MAX_ROWS) return;
+      const cells: string[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        if (col <= MAX_COLS) cells[col - 1] = cellToText(cell.value);
+      });
+      grid[n - 1] = Array.from(cells, (c) => c ?? "");
+    });
+    return { sheet: ws.name, grid: Array.from(grid, (r) => r ?? []) };
+  });
+}
+
+/** The tab that holds the sprint planning table (the one with a "Team Member" header). */
+export function findPlanningSheet(grids: { sheet: string; grid: Grid }[]): { sheet: string; grid: Grid } | null {
+  return grids.find((g) => looksLikePlanningSheet(g.grid)) ?? null;
 }

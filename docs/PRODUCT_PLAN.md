@@ -20,12 +20,12 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Priority | High / Medium / Low + drag-to-rank |
 | Item IDs | Per-LOB code + number, e.g. RB-12 |
 | Look | Orange theme; show/hide password on login |
-| Daily standup | Yesterday / Today / Blockers per member, filterable by squad, date and member |
+| Daily standup | Choose squad and date (today by default), type each member's status by hand (optional blockers); history filterable by squad, date and member |
 | Filters | On home dashboard, backlog, sprint board, timeline, reports and standup |
 | Export | Excel + PDF for every report, Excel for lists, full backup |
 | Language | English only |
 | Hosting | 100% free: Vercel (Hobby) + Neon + GitHub. `*.netlify.app` is blocked on the owner's networks. |
-| Import | Excel import postponed until a sample sheet is shared |
+| Import | The team's sprint planning sheet (Sonata layout, .xlsx or .csv) creates/updates the sprint, member capacity, user stories and tasks. A simple work-item template import also exists. |
 
 ## Phases (all built)
 
@@ -35,6 +35,7 @@ releases, the timeline and reports, following ACT's own process rather than stan
 4. **Timeline**: automatic scheduling from availability, slip and overload warnings, Scrum Master actions (reassign, re-estimate, next sprint, accept baseline)
 5. **Daily standup** with suggestions, history and filters
 6. **Reports & dashboard**: sprint health, velocity, burndown, capacity/load, productivity, commitment/scope/carry-over/bugs, cycle time, release forecast; filters; Excel + PDF export; full backup
-7. **Excel import** of work items using the app's template (change the template once real sheets are shared)
+7. **Excel import** of work items using the app's template
+8. **Sprint planning import**: the sprint sheet becomes the sprint, member capacity, user stories and tasks; the timeline fills automatically from the estimates
 
 Metric formulas are in [TECHNICAL_PLAN.md](./TECHNICAL_PLAN.md#6-metric-definitions).

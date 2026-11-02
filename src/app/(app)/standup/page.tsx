@@ -4,10 +4,9 @@ import { getWorkCalendar } from "@/lib/settings";
 import { isWorkingDay } from "@/lib/capacity";
 import { addDays, formatDate, todayUTC, toISODate, WEEKDAYS } from "@/lib/dates";
 import { applyCls, dateParam, selectCls, toQuery } from "@/lib/filters";
-import { saveStandup } from "@/lib/actions/standup";
 import { itemKey } from "@/lib/work-items";
-import { ActionForm, SubmitButton } from "@/components/ui/forms";
-import { Card, Empty, Field, PageHeader, Table, Td, Textarea, Th } from "@/components/ui";
+import { AutoSubmitForm, LocalDateDefault, StandupMemberForm } from "@/components/standup-form";
+import { Card, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
 
 type Q = { squad?: string; date?: string; member?: string; from?: string; to?: string; hsquad?: string; hmember?: string };
 
@@ -22,13 +21,15 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
   let prev = addDays(date, -1);
   for (let i = 0; i < 14 && !isWorkingDay(prev, cal); i++) prev = addDays(prev, -1);
 
-  const memberships = squad
+  const squadMemberships = squad
     ? await db.squadMembership.findMany({
-        where: { squadId, member: { active: true }, ...(f.member ? { memberId: f.member } : {}) },
+        where: { squadId, member: { active: true } },
         include: { member: true },
         orderBy: { member: { name: "asc" } },
       })
     : [];
+  // A member filter that belongs to another squad is ignored, so changing the squad never leaves an empty page.
+  const memberships = f.member && squadMemberships.some((m) => m.memberId === f.member) ? squadMemberships.filter((m) => m.memberId === f.member) : squadMemberships;
   const memberIds = memberships.map((m) => m.memberId);
   const [entries, tasks] = await Promise.all([
     db.standupEntry.findMany({ where: { date, squadId, memberId: { in: memberIds } } }),
@@ -60,53 +61,61 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
 
   return (
     <>
-      <PageHeader title="Daily Standup" description="Yesterday, today and blockers for each member. Suggestions come from task activity, and your notes are kept as history." />
+      <PageHeader title="Daily Standup" description="Choose the squad and the day, then type each person's status. Your notes are kept as history." />
 
+      {!f.date && <LocalDateDefault serverDate={toISODate(date)} query={toQuery({ squad: f.squad, member: f.member })} />}
       <Card className="mb-4">
-        <form className="flex flex-wrap items-end gap-2">
-          <select name="squad" defaultValue={squadId} className={selectCls} aria-label="Squad">
-            {squads.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <input type="date" name="date" defaultValue={toISODate(date)} className={selectCls} aria-label="Date" />
-          <select name="member" defaultValue={f.member ?? ""} className={selectCls} aria-label="Member">
-            <option value="">All members</option>
-            {allMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <button className={applyCls}>Show</button>
-          <Link href={`/standup${toQuery({ squad: squadId })}`} className="px-2 py-1.5 text-sm text-slate-500 hover:text-slate-800">Today</Link>
-          <span className="ml-2 text-sm text-slate-500">{WEEKDAYS[date.getUTCDay()]}, {formatDate(date)}{!isWorkingDay(date, cal) && " (not a working day)"}</span>
-        </form>
+        <AutoSubmitForm className="flex flex-wrap items-end gap-3">
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            1. Squad
+            <select name="squad" defaultValue={squadId} className={`${selectCls} block`} aria-label="Squad">
+              {squads.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            2. Date
+            <input type="date" name="date" defaultValue={toISODate(date)} className={`${selectCls} block`} aria-label="Date" />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-slate-600">
+            Member (optional)
+            <select name="member" defaultValue={f.member ?? ""} className={`${selectCls} block`} aria-label="Member">
+              <option value="">All members</option>
+              {squadMemberships.map((m) => <option key={m.memberId} value={m.memberId}>{m.member.name}</option>)}
+            </select>
+          </label>
+          <noscript><button className={applyCls}>Show</button></noscript>
+          <Link href={`/standup${toQuery({ squad: squadId })}`} className="pb-2 text-sm text-orange-700 hover:underline">Today</Link>
+          <span className="pb-2 text-sm text-slate-500">{WEEKDAYS[date.getUTCDay()]}, {formatDate(date)}{!isWorkingDay(date, cal) && " (not a working day)"}</span>
+        </AutoSubmitForm>
       </Card>
 
       {!squad ? (
         <Card><Empty>Create a squad and add members first.</Empty></Card>
       ) : memberships.length === 0 ? (
-        <Card><Empty>No active members in {squad.name}{f.member ? " match this member filter" : ""}.</Empty></Card>
+        <Card><Empty>No active members in {squad.name}. Add them on the Members page.</Empty></Card>
       ) : (
         <div className="space-y-4">
           {memberships.map(({ member }) => {
             const e = entryOf.get(member.id);
             const mine = tasks.filter((t) => t.assigneeId === member.id);
-            const doneYesterday = mine.filter((t) => t.status === "DONE").map(line).join("\n");
-            const inProgress = mine.filter((t) => t.status === "IN_PROGRESS").map(line).join("\n");
-            const blocked = mine.filter((t) => t.blocked).map((t) => `${line(t)}${t.blockedReason ? ` — ${t.blockedReason}` : ""}`).join("\n");
+            const done = mine.filter((t) => t.status === "DONE").map(line);
+            const doing = mine.filter((t) => t.status === "IN_PROGRESS").map(line);
+            const suggestion = [done.length ? `Finished since ${formatDate(prev)}:\n- ${done.join("\n- ")}` : "", doing.length ? `In progress:\n- ${doing.join("\n- ")}` : ""].filter(Boolean).join("\n");
+            const blockedList = mine.filter((t) => t.blocked).map((t) => `${line(t)}${t.blockedReason ? ` — ${t.blockedReason}` : ""}`).join("\n");
+            // Notes saved in the earlier format (yesterday / today) are shown as one status until they are edited.
+            const initialStatus = e ? e.status || [e.yesterday && `Yesterday: ${e.yesterday}`, e.today && `Today: ${e.today}`].filter(Boolean).join("\n") : "";
             return (
-              <Card key={member.id} title={member.name} actions={<span className="text-xs text-slate-500">{e ? `Saved ${e.updatedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Not saved yet · suggestions pre-filled"}</span>}>
-                <ActionForm action={saveStandup} className="grid gap-3 md:grid-cols-3" successMessage="Saved." resetOnSuccess={false}>
-                  <input type="hidden" name="date" value={toISODate(date)} />
-                  <input type="hidden" name="squadId" value={squadId} />
-                  <input type="hidden" name="memberId" value={member.id} />
-                  <Field label={`Yesterday (${formatDate(prev)})`}>
-                    <Textarea name="yesterday" rows={4} maxLength={4000} defaultValue={e ? e.yesterday : doneYesterday} />
-                  </Field>
-                  <Field label="Today">
-                    <Textarea name="today" rows={4} maxLength={4000} defaultValue={e ? e.today : inProgress} />
-                  </Field>
-                  <Field label="Blockers">
-                    <Textarea name="blockers" rows={4} maxLength={4000} defaultValue={e ? e.blockers : blocked} />
-                  </Field>
-                  <div className="md:col-span-3"><SubmitButton>Save</SubmitButton></div>
-                </ActionForm>
+              <Card key={member.id} title={member.name} actions={<span className="text-xs text-slate-500">{e ? `Saved ${e.updatedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}` : "Not entered yet"}</span>}>
+                <StandupMemberForm
+                  key={`${squadId}-${toISODate(date)}-${member.id}`}
+                  date={toISODate(date)}
+                  squadId={squadId}
+                  memberId={member.id}
+                  initialStatus={initialStatus}
+                  initialBlockers={e?.blockers ?? ""}
+                  suggestion={suggestion}
+                  blockerSuggestion={blockedList}
+                />
               </Card>
             );
           })}
@@ -137,15 +146,14 @@ export default async function StandupPage({ searchParams }: PageProps<"/standup"
           <Empty>No saved standups in this range.</Empty>
         ) : (
           <Table>
-            <thead><tr><Th>Date</Th><Th>Squad</Th><Th>Member</Th><Th>Yesterday</Th><Th>Today</Th><Th>Blockers</Th></tr></thead>
+            <thead><tr><Th>Date</Th><Th>Squad</Th><Th>Member</Th><Th>Status</Th><Th>Blockers</Th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {history.map((h) => (
                 <tr key={h.id} className="align-top">
                   <Td className="whitespace-nowrap"><Link className="hover:underline" href={`/standup${toQuery({ squad: h.squadId, date: toISODate(h.date) })}`}>{formatDate(h.date)}</Link></Td>
                   <Td>{h.squad.name}</Td>
                   <Td>{h.member.name}</Td>
-                  <Td className="whitespace-pre-wrap text-xs">{h.yesterday || "—"}</Td>
-                  <Td className="whitespace-pre-wrap text-xs">{h.today || "—"}</Td>
+                  <Td className="whitespace-pre-wrap text-xs">{h.status || [h.yesterday && `Yesterday: ${h.yesterday}`, h.today && `Today: ${h.today}`].filter(Boolean).join("\n") || "—"}</Td>
                   <Td className={`whitespace-pre-wrap text-xs ${h.blockers ? "text-red-700" : ""}`}>{h.blockers || "—"}</Td>
                 </tr>
               ))}

@@ -59,6 +59,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
       capacity: sum.capacityByMember[mid] ?? 0,
       assigned: sum.byMember[mid]?.assigned ?? 0,
       done: sum.byMember[mid]?.done ?? 0,
+      plan: sum.plans?.[mid] ?? null,
     }))
     .sort((x, y) => x.name.localeCompare(y.name));
   const loadPct = sum.totalCapacity > 0 ? Math.round((sum.currentHours / sum.totalCapacity) * 100) : null;
@@ -242,6 +243,7 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
                 <Th>Member</Th>
                 <Th className="text-right">Capacity</Th>
                 <Th className="text-right">Assigned</Th>
+                <Th className="text-right">Remaining</Th>
                 <Th>Load</Th>
                 <Th className="text-right">Done</Th>
                 {editable && <Th>Share while overlapping</Th>}
@@ -250,9 +252,17 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <Td>{r.name}</Td>
+                  <Td>
+                    {r.name}
+                    {r.plan && (
+                      <div className="text-xs text-slate-500">
+                        Initial {fmtH(r.plan.initial)} − meetings {fmtH(r.plan.meetings)} − vacation {fmtH(r.plan.vacation)} − other {fmtH(r.plan.other + r.plan.excuses)}
+                      </div>
+                    )}
+                  </Td>
                   <Td className="text-right">{fmtH(r.capacity)}</Td>
                   <Td className="text-right">{fmtH(r.assigned)}</Td>
+                  <Td className={r.assigned > r.capacity + 0.01 ? "text-right font-medium text-red-700" : "text-right"}>{fmtH(Math.round((r.capacity - r.assigned) * 100) / 100)}</Td>
                   <Td><LoadBar assigned={r.assigned} capacity={r.capacity} /></Td>
                   <Td className="text-right">{fmtH(r.done)}</Td>
                   {editable && (
@@ -272,7 +282,10 @@ export default async function SprintPage({ params, searchParams }: PageProps<"/s
           </Table>
         )}
         <div className="mt-3 space-y-1 text-xs text-slate-500">
-          <p>Capacity = the member&apos;s hours for this line of business (hours reserved for it, plus its share of the squad&apos;s unreserved hours) after weekends, holidays and leave.</p>
+          <p>
+            Capacity = the member&apos;s hours for this line of business (hours reserved for it, plus its share of the squad&apos;s unreserved hours) after weekends, holidays and leave.
+            For members taken from the sprint planning sheet, capacity is the sheet&apos;s Final Buffer: initial hours minus meetings, vacation and other fixed work. Remaining = capacity − assigned.
+          </p>
           {overlapping.length > 0 ? (
             <p className="text-amber-700">
               Overlaps with {overlapping.map((o) => o.name).join(", ")}: on shared days each sprint gets an equal share of a member&apos;s hours unless you set a percent above.

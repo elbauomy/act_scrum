@@ -72,6 +72,7 @@ model Member {
   leaves       Leave[]
   assignments  WorkItem[]
   sprintShares SprintMemberShare[]
+  sprintPlans  SprintMemberPlan[]
   standups     StandupEntry[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
@@ -211,6 +212,7 @@ model Sprint {
   items       WorkItem[]
   commitments SprintCommitment[]
   shares      SprintMemberShare[]
+  plans       SprintMemberPlan[]
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
@@ -291,6 +293,8 @@ model StandupEntry {
   memberId  String
   squad     Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// The member's status for the day, typed by hand
+  status    String   @default("")
   yesterday String   @default("")
   today     String   @default("")
   blockers  String   @default("")
@@ -312,4 +316,26 @@ model MemberLobAllocation {
 
   @@unique([membershipId, lobId])
   @@index([lobId])
+}
+
+/// A member's task capacity for one sprint, usually imported from the sprint planning sheet:
+/// initial hours x availability, minus meetings, vacation, excuses and other fixed work. When present it replaces the calculated capacity.
+model SprintMemberPlan {
+  id              String @id @default(cuid())
+  sprintId        String
+  memberId        String
+  availabilityPct Float  @default(100)
+  initialHours    Float
+  meetingsHours   Float  @default(0)
+  vacationHours   Float  @default(0)
+  excuseHours     Float  @default(0)
+  /// Sprint done-definition tasks, scrum master tasks, spikes, awareness...
+  otherHours      Float  @default(0)
+  /// Hours left for story tasks (the sheet's "Final Buffer")
+  capacityHours   Float
+  sprint          Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  member          Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, memberId])
+  @@index([memberId])
 }

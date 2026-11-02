@@ -3,9 +3,16 @@ import { db } from "./db";
 import type { WorkCalendar } from "./capacity";
 import { toISODate } from "./dates";
 
-/** The single settings row; created with defaults on first use. */
+/**
+ * The single settings row, created with defaults on first use.
+ * Several parts of a page can ask for it at the same moment on a brand-new database, so creating it must not fail
+ * when another request got there first.
+ */
 export async function getSettings() {
-  return db.setting.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+  const existing = await db.setting.findUnique({ where: { id: 1 } });
+  if (existing) return existing;
+  await db.setting.createMany({ data: { id: 1 }, skipDuplicates: true });
+  return db.setting.findUniqueOrThrow({ where: { id: 1 } });
 }
 
 export async function getWorkCalendar(): Promise<WorkCalendar> {

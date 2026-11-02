@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { ImportForm } from "@/components/import-form";
-import { Card, DownloadLink, PageHeader } from "@/components/ui";
+import { Card, DownloadLink, LinkButton, PageHeader } from "@/components/ui";
 
 export default async function DataPage() {
   const [items, sprints, standups] = await Promise.all([db.workItem.count(), db.sprint.count(), db.standupEntry.count()]);
@@ -15,6 +15,13 @@ export default async function DataPage() {
           </p>
           <DownloadLink href="/api/export/backup">Download full backup (Excel)</DownloadLink>
           <p className="mt-3 text-xs text-slate-500">The free database plan keeps only a short restore history, so download a backup now and then, for example at the end of each sprint.</p>
+        </Card>
+
+        <Card title="Import a sprint planning sheet" className="lg:col-span-2">
+          <p className="mb-3 text-sm text-slate-600">
+            Upload the sheet you use in sprint planning (the Sonata layout, as Excel or CSV). It creates or updates the sprint, each member&apos;s capacity, the user stories and their tasks.
+          </p>
+          <LinkButton href="/sprints/import" variant="primary">Open sprint planning import</LinkButton>
         </Card>
 
         <Card title="Import work items from Excel">
