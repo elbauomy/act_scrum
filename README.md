@@ -18,42 +18,33 @@ releases, the timeline and Scrum reports, following ACT's own process.
 | 6. Reports & health dashboard | Planned |
 | 7. Excel import | Planned (waiting for sample sheet) |
 
-## Deploying for free (Neon + Render)
+## Deploying for free (Neon + Netlify)
 
-The app runs on **Render** (free web service). The database is on **Neon** (free plan).
-Netlify was tried first, but `*.netlify.app` sites can't be reached from the owner's internet providers.
+### 1. Create the database on Neon
 
-### 1. Database on Neon
+1. Sign in at <https://console.neon.tech> and click **New project**.
+2. Name it `act-scrum`, pick a region, and click **Create**.
+3. On the project dashboard, click **Connect**. You need two connection strings:
+   - With **Connection pooling ON**, copy the string. This is your `DATABASE_URL`.
+   - With **Connection pooling OFF**, copy the string. This is your `DIRECT_URL`.
 
-1. Sign in at <https://console.neon.tech> and open the `act-scrum` project (region: London).
-2. Click **Connect**. Neon shows two connection strings:
-   - The one whose host contains `-pooler` (Neon may call it `DATABASE_URL_POOLED`). This is our **`DATABASE_URL`**.
-   - The one **without** `-pooler` (Neon may call it `DATABASE_URL`). This is our **`DIRECT_URL`**.
-3. Remove `&channel_binding=require` from the end of both, so each one ends with `?sslmode=require`.
+### 2. Create the site on Netlify
 
-### 2. Web service on Render
-
-1. Sign in at <https://dashboard.render.com> with GitHub.
-2. Click **New → Blueprint**, choose the `act_scrum` repository, and click **Connect**.
-   Render reads `render.yaml` and creates a free web service called `act-scrum` in Frankfurt.
-3. Render asks for the secret values:
+1. Sign in at <https://app.netlify.com> → **Add new project** → **Import an existing project** → **GitHub**.
+2. Choose the `act_scrum` repository and the branch to publish (normally `main`).
+3. Before deploying, open **Environment variables** and add:
 
 | Key | Value |
 |---|---|
-| `DATABASE_URL` | Neon string **with** `-pooler` |
-| `DIRECT_URL` | Neon string **without** `-pooler` |
+| `DATABASE_URL` | Neon pooled connection string |
+| `DIRECT_URL` | Neon direct connection string |
 | `APP_PASSWORD` | The password you will use to sign in |
+| `SESSION_SECRET` | Any random text of at least 32 characters |
 
-   `SESSION_SECRET` is generated automatically.
+4. Click **Deploy**. The build creates the database tables automatically.
+5. Open the site address Netlify gives you and sign in with your `APP_PASSWORD`.
 
-4. Click **Apply**. The first build takes a few minutes. It also creates or updates the database tables.
-5. Open the address Render shows (`https://act-scrum-xxxx.onrender.com`) and sign in.
-
-Every push to `main` redeploys automatically. To change the password, edit `APP_PASSWORD` under the
-service's **Environment** tab. Render redeploys after you save.
-
-**Free-plan behaviour:** after 15 minutes without visits the service goes to sleep. The next visit
-wakes it, which takes up to about a minute. After that it's fast again.
+To change the password later, edit `APP_PASSWORD` in Netlify and redeploy.
 
 ## Running locally (developers)
 
