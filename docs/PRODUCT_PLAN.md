@@ -22,12 +22,12 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Filters | On home dashboard, backlog, sprint board, timeline, reports and standup |
 | Export | Excel + PDF for every report, Excel for lists, full backup |
 | Language | English only |
-| Hosting | 100% free: Netlify + Neon + GitHub |
+| Hosting | 100% free: Render (web) + Neon (database) + GitHub. Netlify was dropped because `*.netlify.app` is blocked on the owner's internet providers. |
 | Import | Excel import postponed until a sample sheet is shared |
 
 ## Phases
 
-1. **Foundation**: login, settings, holidays, squads, LOBs, members (squad hours, leave), deployed to Netlify
+1. **Foundation**: login, settings, holidays, squads, LOBs, members (squad hours, leave), deployed to Render
 2. **Work items**: hierarchy, statuses, estimates, assignment, priority/rank, blocked, history, backlog + filters
 3. **Sprints & releases**: per-LOB sprints, capacity planning, board, commitment snapshot, carry-over, release date log
 4. **Timeline**: automatic scheduling, slip/overload warnings, Scrum Master actions
