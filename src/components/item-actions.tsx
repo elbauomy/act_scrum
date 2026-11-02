@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { moveToNextSprint, quickAssign, quickEstimate, setItemSprint } from "@/lib/actions/sprints";
 import { setSprintRelease } from "@/lib/actions/releases";
 import type { ActionState } from "@/lib/action-state";
+import { useReadOnly } from "@/components/role-provider";
 import { cn } from "@/components/ui";
 
 function useRun() {
@@ -12,9 +13,14 @@ function useRun() {
   const run = (fn: () => Promise<ActionState>, onFail?: () => void) => {
     setError(null);
     start(async () => {
-      const res = await fn();
-      if (res.error) {
-        setError(res.error);
+      try {
+        const res = await fn();
+        if (res.error) {
+          setError(res.error);
+          onFail?.();
+        }
+      } catch {
+        setError("This change was not saved. You may be signed out, or this is a view-only account.");
         onFail?.();
       }
     });
@@ -29,6 +35,7 @@ const btn = "rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50
 /** Button that plans an item into a sprint, or takes it out when sprintId is null. */
 export function SprintButton({ itemId, sprintId, label, variant = "secondary" }: { itemId: string; sprintId: string | null; label: string; variant?: "primary" | "secondary" | "danger" }) {
   const { pending, error, run } = useRun();
+  if (useReadOnly()) return null;
   return (
     <span className="inline-flex items-center gap-2">
       <button
@@ -46,6 +53,7 @@ export function SprintButton({ itemId, sprintId, label, variant = "secondary" }:
 
 export function NextSprintButton({ itemId }: { itemId: string }) {
   const { pending, error, run } = useRun();
+  if (useReadOnly()) return null;
   return (
     <span className="inline-flex flex-col gap-1">
       <button type="button" disabled={pending} onClick={() => run(() => moveToNextSprint(itemId))} className={cn(btn, "border-slate-300 bg-white text-slate-700 hover:bg-slate-50")}>
@@ -60,12 +68,13 @@ export function NextSprintButton({ itemId }: { itemId: string }) {
 export function SprintSelect({ itemId, value, options }: { itemId: string; value: string; options: { id: string; name: string }[] }) {
   const [current, setCurrent] = useState(value);
   const { pending, error, run } = useRun();
+  const readOnly = useReadOnly();
   return (
     <span className="inline-flex items-center gap-2">
       <select
         aria-label="Sprint"
         value={current}
-        disabled={pending}
+        disabled={pending || readOnly}
         onChange={(e) => {
           const previous = current;
           setCurrent(e.target.value);
@@ -86,12 +95,13 @@ export function SprintSelect({ itemId, value, options }: { itemId: string; value
 export function AssigneeSelect({ taskId, value, options }: { taskId: string; value: string; options: { id: string; name: string }[] }) {
   const [current, setCurrent] = useState(value);
   const { pending, error, run } = useRun();
+  const readOnly = useReadOnly();
   return (
     <span className="inline-flex items-center gap-1">
       <select
         aria-label="Assignee"
         value={current}
-        disabled={pending}
+        disabled={pending || readOnly}
         onChange={(e) => {
           const previous = current;
           setCurrent(e.target.value);
@@ -112,6 +122,7 @@ export function AssigneeSelect({ taskId, value, options }: { taskId: string; val
 export function EstimateInput({ taskId, value }: { taskId: string; value: number | null }) {
   const [text, setText] = useState(value == null ? "" : String(value));
   const { pending, error, run } = useRun();
+  const readOnly = useReadOnly();
   return (
     <span className="inline-flex items-center gap-1">
       <input
@@ -121,7 +132,7 @@ export function EstimateInput({ taskId, value }: { taskId: string; value: number
         max="1000"
         step="0.25"
         value={text}
-        disabled={pending}
+        disabled={pending || readOnly}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           const n = text === "" ? null : Number(text);
@@ -139,12 +150,13 @@ export function EstimateInput({ taskId, value }: { taskId: string; value: number
 export function ReleaseSelect({ sprintId, value, options }: { sprintId: string; value: string; options: { id: string; name: string }[] }) {
   const [current, setCurrent] = useState(value);
   const { pending, error, run } = useRun();
+  const readOnly = useReadOnly();
   return (
     <span className="inline-flex items-center gap-2">
       <select
         aria-label="Release"
         value={current}
-        disabled={pending}
+        disabled={pending || readOnly}
         onChange={(e) => {
           const previous = current;
           setCurrent(e.target.value);

@@ -2,6 +2,9 @@
 
 A simple rhythm for running your squads. Every list has filters at the top; the page address keeps them, so you can bookmark a view.
 
+## Signing in (two accounts)
+Sign in with a user name and a password. **khaled elbauomy** is the owner and can do everything. **remoon milad** is a view-only account: it can open every page, use the filters, and download reports and the backup, but cannot create, edit, delete, import or move anything (buttons and forms are hidden or locked, and the system refuses changes even if someone tries to force them). Passwords are set in Vercel (`APP_PASSWORD` and `VIEWER_PASSWORD`); to change one, edit it there and redeploy.
+
 ## One-time setup
 1. **Settings** — tick your working days, set hours per day, the default sprint length, and add public holidays.
 2. **Squads** → **Lines of Business** (each belongs to one squad and gets a short code such as `RB`) → **Members** (name, role, hours per week in each squad, and leave).

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { loadAnalytics } from "@/lib/analytics";
 import { loadBacklog, type BacklogFilters } from "@/lib/backlog";
@@ -31,7 +31,7 @@ function file(buffer: Buffer, name: string) {
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ name: string }> }) {
-  await requireAuth();
+  await requireSession();
   const { name } = await ctx.params;
   const q = params(req);
 

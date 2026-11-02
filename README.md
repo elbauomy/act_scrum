@@ -41,12 +41,15 @@ In <https://console.neon.tech>, open the project and click **Connect**:
 |---|---|
 | `DATABASE_URL` | Neon pooled connection string |
 | `DIRECT_URL` | Neon direct connection string |
-| `APP_PASSWORD` | The password you will use to sign in |
+| `APP_PASSWORD` | The owner's password (user name `khaled elbauomy`) |
+| `VIEWER_PASSWORD` | The view-only user's password (user name `remoon milad`). If it is empty, that account cannot sign in |
 | `SESSION_SECRET` | Any random text of at least 32 characters |
+
+The user names are built in and can be changed with the optional `ADMIN_USERNAME` and `VIEWER_USERNAME` settings.
 
 3. Click **Deploy**. `vercel.json` makes each build apply database changes first.
 
-Every merge to `main` redeploys automatically. To change the password, edit `APP_PASSWORD` in
+Every merge to `main` redeploys automatically. To change a password, edit `APP_PASSWORD` or `VIEWER_PASSWORD` in
 Vercel → Settings → Environment Variables, then redeploy.
 
 ## Running locally (developers)

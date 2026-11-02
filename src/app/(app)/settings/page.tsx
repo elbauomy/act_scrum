@@ -4,6 +4,7 @@ import { WEEKDAYS, formatDate, toISODate } from "@/lib/dates";
 import { addHoliday, deleteHoliday, updateSettings } from "@/lib/actions/settings";
 import { ActionForm, DeleteButton, SubmitButton } from "@/components/ui/forms";
 import { Card, Empty, Field, Input, PageHeader, Table, Td, Th } from "@/components/ui";
+import { EditOnly } from "@/components/edit-only";
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const { year } = (await searchParams) as { year?: string };
@@ -45,6 +46,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </Card>
 
         <Card title="Public holidays">
+          <EditOnly>
           <ActionForm action={addHoliday} className="mb-4 grid gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
             <Field label="Date">
               <Input type="date" name="date" required />
@@ -54,6 +56,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Field>
             <SubmitButton>Add</SubmitButton>
           </ActionForm>
+          </EditOnly>
 
           {years.length > 1 && (
             <form className="mb-3 flex items-center gap-2 text-sm">

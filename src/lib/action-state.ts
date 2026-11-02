@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { ForbiddenError } from "./forbidden";
 import { z } from "zod";
 
 /** What every form action returns. */
@@ -18,6 +19,7 @@ export const initialState: ActionState = {};
 
 /** Turn known errors into a friendly message for the form. */
 export function toActionError(err: unknown): ActionState {
+  if (err instanceof ForbiddenError) return { error: err.message };
   if (err instanceof z.ZodError) {
     return { error: err.issues.map((i) => i.message).join(". ") };
   }

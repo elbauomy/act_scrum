@@ -23,6 +23,7 @@ import { PriorityLabel, ProgressBar, TypeBadge, formatHours } from "@/components
 import { StatusSelect } from "@/components/work-items/status-select";
 import { NewItemForm } from "@/components/work-items/new-item-form";
 import { SprintSelect } from "@/components/item-actions";
+import { EditOnly } from "@/components/edit-only";
 
 type TreeItem = { id: string; type: RollupNode["type"]; status: WorkItemStatus; estimateHours: number | null; parentId: string | null };
 
@@ -197,6 +198,7 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
 
           {childTypes.length > 0 && (
             <Card title={`${childTypes.map((t) => TYPE_LABEL[t]).join(" / ")} items (${item.children.length})`}>
+              <EditOnly>
               <div className="mb-4">
                 <NewItemForm
                   lobs={[{ id: item.lobId, name: item.lob.name, key: item.lob.key, squadId: item.lob.squadId }]}
@@ -205,6 +207,7 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
                   fixedParent={{ id: item.id, key, title: item.title, type: item.type, lobId: item.lobId }}
                 />
               </div>
+              </EditOnly>
               {item.children.length === 0 ? (
                 <Empty>Nothing here yet.</Empty>
               ) : (
@@ -278,10 +281,12 @@ export default async function ItemPage({ params }: PageProps<"/items/[id]">) {
             )}
           </Card>
 
+          <EditOnly>
           <Card title="Delete">
             <p className="mb-3 text-sm text-slate-500">Items with children cannot be deleted until the children are removed or moved.</p>
             <DeleteButton action={deleteWorkItem} id={item.id} label={`Delete ${TYPE_LABEL[item.type]}`} confirmText={`Delete ${key} "${item.title}"? This cannot be undone.`} />
           </Card>
+          </EditOnly>
         </div>
       </div>
     </>

@@ -7,6 +7,7 @@ import { setWorkItemStatus } from "@/lib/actions/work-items";
 import { quickAssign } from "@/lib/actions/sprints";
 import { PRIORITY_LABEL, STATUS_LABEL, statusesFor } from "@/lib/work-items";
 import { cn } from "@/components/ui";
+import { useReadOnly } from "@/components/role-provider";
 import { TypeBadge } from "@/components/work-items/badges";
 import { StatusSelect } from "@/components/work-items/status-select";
 
@@ -33,6 +34,7 @@ export function Board({ cards: initial, columns, group }: { cards: BoardCard[]; 
   const [overCol, setOverCol] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const readOnly = useReadOnly();
 
   const columnOf = (c: BoardCard) => (group === "status" ? c.status : c.assigneeId ?? "none");
 
@@ -63,10 +65,15 @@ export function Board({ cards: initial, columns, group }: { cards: BoardCard[]; 
       ),
     );
     startTransition(async () => {
-      const res = group === "status" ? await setWorkItemStatus(card.id, col as WorkItemStatus) : await quickAssign(card.id, col === "none" ? null : col);
-      if (res.error) {
+      try {
+        const res = group === "status" ? await setWorkItemStatus(card.id, col as WorkItemStatus) : await quickAssign(card.id, col === "none" ? null : col);
+        if (res.error) {
+          setCards(before);
+          setError(res.error);
+        }
+      } catch {
         setCards(before);
-        setError(res.error);
+        setError("This change was not saved. You may be signed out, or this is a view-only account.");
       }
     });
   }
@@ -115,7 +122,7 @@ export function Board({ cards: initial, columns, group }: { cards: BoardCard[]; 
                 {list.map((c) => (
                   <article
                     key={c.id}
-                    draggable
+                    draggable={!readOnly}
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";
                       e.dataTransfer.setData("text/plain", c.id);
@@ -125,7 +132,7 @@ export function Board({ cards: initial, columns, group }: { cards: BoardCard[]; 
                       setDragId(null);
                       setOverCol(null);
                     }}
-                    className={cn("cursor-grab rounded-md border bg-white p-2 shadow-sm", c.blocked ? "border-red-300" : "border-slate-200", dragId === c.id && "opacity-40")}
+                    className={cn(!readOnly && "cursor-grab", "rounded-md border bg-white p-2 shadow-sm", c.blocked ? "border-red-300" : "border-slate-200", dragId === c.id && "opacity-40")}
                   >
                     <div className="mb-1 flex items-center gap-1.5 text-xs">
                       <TypeBadge type={c.type} short />
@@ -150,7 +157,7 @@ export function Board({ cards: initial, columns, group }: { cards: BoardCard[]; 
           );
         })}
       </div>
-      <p className="mt-2 text-xs text-slate-500">Drag a card to {group === "status" ? "change its status" : "assign a task to a member"}.</p>
+      {!readOnly && <p className="mt-2 text-xs text-slate-500">Drag a card to {group === "status" ? "change its status" : "assign a task to a member"}.</p>}
     </div>
   );
 }

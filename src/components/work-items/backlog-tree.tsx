@@ -7,10 +7,13 @@ import { deleteWorkItems, reorderWorkItems } from "@/lib/actions/work-items";
 import type { ActionState } from "@/lib/action-state";
 import { statusesFor } from "@/lib/work-items";
 import { cn } from "@/components/ui";
+import { useReadOnly } from "@/components/role-provider";
 import { PriorityLabel, ProgressBar, TypeBadge, formatHours } from "./badges";
 import { StatusSelect } from "./status-select";
 
-export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReorder: boolean }) {
+export function BacklogTree({ rows, canReorder: canReorderProp }: { rows: BacklogRow[]; canReorder: boolean }) {
+  const readOnly = useReadOnly();
+  const canReorder = canReorderProp && !readOnly;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -100,15 +103,17 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
         <button type="button" className="hover:text-orange-700" onClick={() => setCollapsed(new Set(parents))}>
           Collapse all
         </button>
-        <span>
-          {canReorder
-            ? "Drag ⋮⋮ to change the order of items under the same parent."
-            : "Clear the item filters to change the order."}
-        </span>
+        {!readOnly && (
+          <span>
+            {canReorder
+              ? "Drag ⋮⋮ to change the order of items under the same parent."
+              : "Clear the item filters to change the order."}
+          </span>
+        )}
         {error && <span role="alert" className="text-red-600">{error}</span>}
-        <span className="mx-1 text-slate-300">|</span>
-        <button type="button" className="hover:text-orange-700" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>Select all</button>
-        {selected.size > 0 && (
+        {!readOnly && <span className="mx-1 text-slate-300">|</span>}
+        {!readOnly && <button type="button" className="hover:text-orange-700" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>Select all</button>}
+        {!readOnly && selected.size > 0 && (
           <>
             <button type="button" className="hover:text-orange-700" onClick={() => setSelected(new Set())}>Clear selection</button>
             <button
@@ -138,7 +143,7 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="w-6" />
+              {!readOnly && <th className="w-6" />}
               {canReorder && <th className="w-6" />}
               <th className="px-2 py-2 font-semibold">Item</th>
               <th className="px-2 py-2 font-semibold">Status</th>
@@ -172,14 +177,16 @@ export function BacklogTree({ rows, canReorder }: { rows: BacklogRow[]; canReord
                     overId === r.id && "bg-orange-50 outline outline-2 outline-orange-300",
                   )}
                 >
-                  <td className="w-6 pl-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(r.id)}
-                      onChange={(e) => toggleSelect(r, e.target.checked)}
-                      aria-label={`Select ${r.key}`}
-                    />
-                  </td>
+                  {!readOnly && (
+                    <td className="w-6 pl-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.id)}
+                        onChange={(e) => toggleSelect(r, e.target.checked)}
+                        aria-label={`Select ${r.key}`}
+                      />
+                    </td>
+                  )}
                   {canReorder && (
                     <td className="w-6 pl-1">
                       <span

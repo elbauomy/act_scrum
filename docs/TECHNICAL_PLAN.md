@@ -257,8 +257,13 @@ Hours "burn" only when a task becomes **Done**.
 
 ## 7. Security
 
-- `APP_PASSWORD` (the login password) and `SESSION_SECRET` (signs the session cookie) live only in the
-  hosting provider's environment variables, never in the code.
+- `APP_PASSWORD` (owner), `VIEWER_PASSWORD` (view-only user) and `SESSION_SECRET` (signs the session cookie) live only in the
+  hosting provider's environment variables, never in the code. User names default to `khaled elbauomy` and `remoon milad` (`ADMIN_USERNAME`, `VIEWER_USERNAME`).
+- Two roles (`credentials.ts`): **admin** and **viewer**. The session cookie carries the role and name, signed with HS256, so it cannot be changed in the browser.
+  Login compares the typed password with the account's password in constant time and gives the same message for an unknown user and a wrong password.
+- `requireSession()` lets any signed-in user view pages and download exports; `requireAuth()` (called first in every Server Action and import) lets only the admin through and throws `ForbiddenError` for the viewer.
+  The screens follow: `RoleProvider` makes shared forms, buttons, selects, drag and drop and bulk bars read-only, and `EditOnly` hides create, delete and import sections for the viewer.
+  The server check is the real protection; hiding is only convenience.
 - Session cookie: `httpOnly`, `secure`, `sameSite=lax`, lasts 30 days.
 - `proxy.ts` sends anyone not signed in to `/login`. Every Server Action and every export route calls `requireAuth()`.
 - All database access goes through Prisma (no hand-built SQL), and all input is validated with Zod.

@@ -7,7 +7,7 @@ releases, the timeline and reports, following ACT's own process rather than stan
 
 | Topic | Decision |
 |---|---|
-| Users (v1) | Only the Scrum Master logs in. Members are names only. |
+| Users | Two accounts sign in with a user name and password: the owner (khaled elbauomy) can do everything; a view-only user (remoon milad) can see everything and download reports and backups but change nothing. Squad members are names only. |
 | Structure | Squad → Line of Business (LOB) → Epic → Feature → User Story / Bug → Task. A LOB is the "project" and belongs to one squad. Squads and LOBs can be added, edited and deleted at any time. |
 | Statuses | Story/Bug: New → Approved → Committed → Done. Task: New → In Progress → Done. Plus a separate Blocked flag with a reason. |
 | Estimation | Hours only, on tasks |

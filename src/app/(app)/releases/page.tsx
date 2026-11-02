@@ -7,6 +7,7 @@ import { ActionForm, SubmitButton } from "@/components/ui/forms";
 import { fmtH } from "@/components/sprint-ui";
 import { Card, Empty, Field, Input, PageHeader, Select, Table, Td, Textarea, Th } from "@/components/ui";
 import { ReleaseStatus } from "@/components/release-status";
+import { EditOnly } from "@/components/edit-only";
 
 type Q = { squad?: string; lob?: string; status?: string; from?: string; to?: string; q?: string };
 
@@ -88,6 +89,7 @@ export default async function ReleasesPage({ searchParams }: PageProps<"/release
           <p className="mt-3 text-xs text-slate-500">Forecast = remaining hours of the release&apos;s open sprints ÷ the line&apos;s average velocity (last 3 closed sprints).</p>
         </Card>
 
+        <EditOnly>
         <Card title="New release">
           {a.lobs.length === 0 ? (
             <Empty>Create a line of business first.</Empty>
@@ -109,6 +111,7 @@ export default async function ReleasesPage({ searchParams }: PageProps<"/release
             </ActionForm>
           )}
         </Card>
+        </EditOnly>
       </div>
     </>
   );

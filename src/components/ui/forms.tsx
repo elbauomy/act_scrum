@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Button, cn } from "./index";
 import type { ActionState } from "@/lib/action-state";
+import { useReadOnly } from "@/components/role-provider";
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -25,6 +26,7 @@ export function ActionForm({
   onSuccess?: () => void;
 }) {
   const [state, formAction] = useActionState(action, {});
+  const readOnly = useReadOnly();
   const ref = useRef<HTMLFormElement>(null);
   const onSuccessRef = useRef(onSuccess);
   useEffect(() => {
@@ -37,6 +39,14 @@ export function ActionForm({
     onSuccessRef.current?.();
   }, [state, resetOnSuccess]);
 
+  // The view-only account sees the values but cannot type in them or send them.
+  if (readOnly) {
+    return (
+      <form className={className} onSubmit={(e) => e.preventDefault()}>
+        <fieldset disabled className="contents">{children}</fieldset>
+      </form>
+    );
+  }
   return (
     <form ref={ref} action={formAction} className={className}>
       {children}
@@ -56,6 +66,8 @@ export function ActionForm({
 
 export function SubmitButton({ children, variant, className, disabled }: { children: ReactNode; variant?: "primary" | "secondary" | "danger"; className?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
+  const readOnly = useReadOnly();
+  if (readOnly) return null;
   return (
     <Button type="submit" variant={variant} disabled={pending || disabled} className={className}>
       {pending ? "Saving…" : children}
@@ -78,6 +90,8 @@ export function DeleteButton({
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const readOnly = useReadOnly();
+  if (readOnly) return null;
   return (
     <form
       action={formAction}
