@@ -1,19 +1,82 @@
 @import "tailwindcss";
 
+/*
+ * ACT brand: black + orange, Poppins.
+ * Values come from advancedcomputertechnology.com (primary hsl(18 97% 57%) = the logo's #FC6A28).
+ * The orange and slate scales are replaced here, so every existing orange-* / slate-* class follows the brand.
+ */
+@theme {
+  --color-orange-50: #fff5ee;
+  --color-orange-100: #ffe7d6;
+  --color-orange-200: #ffcfae;
+  --color-orange-300: #ffae78;
+  --color-orange-400: #fe8745;
+  --color-orange-500: #fc6a28;
+  --color-orange-600: #e9531a;
+  --color-orange-700: #c2410f;
+  --color-orange-800: #9a3411;
+  --color-orange-900: #7c2d12;
+  --color-orange-950: #431407;
+
+  /* Pure greys, like the ACT website, instead of blue-tinted slate */
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f5;
+  --color-slate-200: #e5e5e5;
+  --color-slate-300: #d4d4d4;
+  --color-slate-400: #a3a3a3;
+  --color-slate-500: #737373;
+  --color-slate-600: #525252;
+  --color-slate-700: #404040;
+  --color-slate-800: #262626;
+  --color-slate-900: #171717;
+  --color-slate-950: #0a0a0a;
+}
+
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f4f4f5;
+  --foreground: #171717;
+  --brand: #fc6a28;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-feature-settings: "ss01" off;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(252, 106, 40, 0.28);
+}
+
+/* One corner radius and a gentle orange focus on every form control, including the small filter bars */
+select,
+textarea,
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]) {
+  border-radius: 0.5rem;
+}
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(252, 106, 40, 0.22);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--brand);
+}
+
+/* Slim, quiet scrollbars (the sidebar and wide tables scroll) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(115, 115, 115, 0.45) transparent;
 }
 
 @media print {

@@ -5,7 +5,7 @@ import { formatDate } from "@/lib/dates";
 import { BurndownChart, GroupedBars } from "@/components/charts";
 import { PrintButton } from "@/components/print-button";
 import { ReportTableView } from "@/components/report-table";
-import { Card, Empty, PageHeader, cn } from "@/components/ui";
+import { Card, Empty, PageHeader, tabClass } from "@/components/ui";
 
 type Q = ReportFilters & { report?: string };
 
@@ -85,7 +85,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
 
       <nav className="no-print mb-4 flex flex-wrap gap-1" aria-label="Reports">
         {REPORTS.map((r) => (
-          <Link key={r.id} href={`/reports${query({ report: r.id })}`} className={cn("rounded-md px-3 py-1.5 text-sm", r.id === report ? "bg-orange-600 font-medium text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50")}>
+          <Link key={r.id} href={`/reports${query({ report: r.id })}`} className={tabClass(r.id === report)}>
             {r.label}
           </Link>
         ))}

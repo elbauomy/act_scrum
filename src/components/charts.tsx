@@ -2,8 +2,8 @@
 
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const ORANGE = "#ea580c";
-const SLATE = "#94a3b8";
+const ORANGE = "#fc6a28";
+const SLATE = "#a3a3a3";
 const GREEN = "#16a34a";
 const SKY = "#0284c7";
 
@@ -14,7 +14,7 @@ export function BurndownChart({ data, height = 280 }: { data: BurndownRow[]; hei
     <div style={{ height }} role="img" aria-label="Burndown chart: remaining hours per day against the ideal line">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
           <YAxis tick={{ fontSize: 11 }} width={40} />
           <Tooltip />
@@ -37,7 +37,7 @@ export function GroupedBars({ data, series, height = 280, unit = "" }: { data: R
     <div style={{ height }} role="img" aria-label="Bar chart">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
           <YAxis tick={{ fontSize: 11 }} width={40} unit={unit} />
           <Tooltip />
