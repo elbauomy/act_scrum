@@ -28,7 +28,7 @@ const sections: { title: string; items: NavItem[] }[] = [
       { href: "/reports", label: "Reports" },
     ],
   },
-  { title: "System", items: [{ href: "/settings", label: "Settings" }, { href: "/data", label: "Import & Backup" }] },
+  { title: "System", items: [{ href: "/settings", label: "Settings" }, { href: "/data", label: "Import & Backup" }, { href: "/azure", label: "Azure DevOps" }] },
 ];
 
 export function Nav() {

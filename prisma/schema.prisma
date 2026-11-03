@@ -52,6 +52,11 @@ model LineOfBusiness {
   key              String                @unique
   /// Next item number to hand out in this LOB
   nextItemNumber   Int                   @default(1)
+  /// Name of the Azure DevOps project this line syncs with (empty = not linked)
+  adoProject       String?
+  adoLastSyncAt    DateTime?
+  /// Summary of the last sync (see SyncSummary in src/lib/ado-sync.ts)
+  adoLastResult    Json?
   workItems        WorkItem[]
   sprints          Sprint[]
   releases         Release[]
@@ -162,10 +167,15 @@ model WorkItem {
   history            WorkItemHistory[]
   commitments        SprintCommitment[]
   baseline           TaskBaseline?
+  /// Azure DevOps work item id when this item is linked
+  adoId              Int?
+  /// What both sides agreed on at the last sync (see ItemSnapshot in src/lib/ado-sync.ts)
+  adoSnapshot        Json?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   @@unique([lobId, number])
+  @@unique([lobId, adoId])
   @@index([parentId])
   @@index([assigneeId])
   @@index([lobId, type])
@@ -205,6 +215,8 @@ model Sprint {
   startDate   DateTime            @db.Date
   endDate     DateTime            @db.Date
   state       SprintState         @default(PLANNED)
+  /// Azure DevOps iteration path, e.g. SONATA/Release 6/Sprint 62 (backslashes)
+  adoPath     String?
   releaseId   String?
   release     Release?            @relation(fields: [releaseId], references: [id], onDelete: SetNull)
   startedAt   DateTime?
