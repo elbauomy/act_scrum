@@ -19,7 +19,7 @@ releases, the timeline and reports, following ACT's own process rather than stan
 | Timeline | Built automatically from assignee availability only (no dependencies). Slips are shown, and nothing changes until the Scrum Master acts. A daily-plan view shows the user story and tasks each member works on every day. |
 | Priority | High / Medium / Low + drag-to-rank |
 | Item IDs | Per-LOB code + number, e.g. RB-12 |
-| Look | Orange theme; show/hide password on login |
+| Look | ACT brand: black sidebar with the ACT logo, brand orange (#FC6A28), Poppins font, rounded cards; split login page; works on phones with a menu button; show/hide password on login |
 | Daily standup | Choose squad and date (today by default), type each member's status by hand (optional blockers); history filterable by squad, date and member |
 | Filters | On home dashboard, backlog, sprint board, timeline, reports and standup |
 | Export | Excel + PDF for every report, Excel for lists, full backup |

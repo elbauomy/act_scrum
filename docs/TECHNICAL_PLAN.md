@@ -228,6 +228,14 @@ A manual, two-way sync per line of business (`/azure`). No webhooks and no backg
 
 **Safety.** Items are never created or deleted in Azure DevOps, nothing is ever deleted locally, removed or missing items are only reported, and the first import skips finished items older than 60 days.
 
+### Look and feel (ACT brand)
+
+Taken from advancedcomputertechnology.com: primary `hsl(18 97% 57%)` = `#FC6A28` (the logo's colour), black and white, Poppins, `0.75rem` radius, an orange gradient for accents, dark text on orange buttons.
+- `globals.css` replaces Tailwind's `orange` scale with the brand scale and `slate` with pure greys, so every existing `orange-*` / `slate-*` class follows the brand without touching each page.
+- `ui/index.tsx` holds the shared look: `primaryButton`, `tabClass`, cards, tables, badges, stat tiles. New screens should use these instead of hard-coded colours.
+- `sidebar-shell.tsx` (dark sidebar, logo, phone menu that closes when a page opens), `nav.tsx` (line icons), `app/login/page.tsx` (split brand panel).
+- Assets: `public/brand/act-logo.png` (cropped from the site's logo), `app/icon.png` and `app/apple-icon.png`, fonts in `app/fonts` loaded with `next/font/local` (no network needed at build or run time). `proxy.ts` lets the brand images through when signed out so the login page can show them.
+
 ## 5. Capacity and scheduling algorithm
 
 **Daily hours of a member in a squad**

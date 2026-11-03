@@ -42,7 +42,7 @@ export function SprintButton({ itemId, sprintId, label, variant = "secondary" }:
         type="button"
         disabled={pending}
         onClick={() => run(() => setItemSprint(itemId, sprintId))}
-        className={cn(btn, variant === "primary" && "border-orange-600 bg-orange-600 text-white hover:bg-orange-700", variant === "secondary" && "border-slate-300 bg-white text-slate-700 hover:bg-slate-50", variant === "danger" && "border-red-300 bg-white text-red-600 hover:bg-red-50")}
+        className={cn(btn, variant === "primary" && "border-orange-500 bg-orange-500 font-semibold text-neutral-950 hover:bg-orange-400", variant === "secondary" && "border-slate-300 bg-white text-slate-700 hover:bg-slate-50", variant === "danger" && "border-red-300 bg-white text-red-600 hover:bg-red-50")}
       >
         {pending ? "…" : label}
       </button>

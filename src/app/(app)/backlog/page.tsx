@@ -5,7 +5,7 @@ import { loadItemFormOptions } from "@/lib/item-options";
 import { PRIORITIES, PRIORITY_LABEL, STATUS_LABEL, TYPES, TYPE_LABEL } from "@/lib/work-items";
 import { BacklogTree } from "@/components/work-items/backlog-tree";
 import { NewItemForm } from "@/components/work-items/new-item-form";
-import { Card, Empty, LinkButton, PageHeader } from "@/components/ui";
+import { Card, Empty, LinkButton, PageHeader, cn, primaryButton } from "@/components/ui";
 import { EditOnly, canEdit } from "@/components/edit-only";
 
 const selectCls = "rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm";
@@ -68,7 +68,7 @@ export default async function BacklogPage({ searchParams }: PageProps<"/backlog"
             <input type="date" name="to" defaultValue={f.to} className={selectCls} aria-label="Created to" />
           </label>
           <input name="q" defaultValue={f.q} placeholder="Title or ID (e.g. RB-12)" className={`${selectCls} w-52`} aria-label="Search" />
-          <button className="rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-700">Apply</button>
+          <button className={cn("rounded-lg px-3.5 py-1.5 text-sm", primaryButton)}>Apply</button>
           <Link href="/backlog" className="px-2 py-1.5 text-sm text-slate-500 hover:text-slate-800">Clear</Link>
         </form>
       </Card>
